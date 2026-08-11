@@ -118,10 +118,11 @@ export async function rescheduleOccurrence(db: Db, lessonId: string, replacement
   if (toDateInput(lesson.scheduledDate) < today) throw new Error("Past lessons cannot be rescheduled");
   if (replacement.date < today) throw new Error("A replacement lesson cannot be moved into the past");
   if (lesson.status !== "PLANNED") throw new Error("Only planned lessons can be rescheduled");
-  if (!lesson.recurringScheduleId) throw new Error("Lesson is not part of a recurring schedule");
   const target: ScheduleTarget = lesson.studentId ? { studentId: lesson.studentId } : { cohortId: lesson.cohortId! };
-  await db.scheduleException.deleteMany({ where: { scheduleId: lesson.recurringScheduleId, occurrenceDate: lesson.scheduledDate } });
-  await db.scheduleException.create({ data: { scheduleId: lesson.recurringScheduleId, occurrenceDate: lesson.scheduledDate, kind: "OCCURRENCE_OVERRIDE", replacementDate: dateOnly(replacement.date), replacementStartMinute: replacement.startMinute, replacementDurationMinutes: replacement.durationMinutes } });
+  if (lesson.recurringScheduleId) {
+    await db.scheduleException.deleteMany({ where: { scheduleId: lesson.recurringScheduleId, occurrenceDate: lesson.scheduledDate } });
+    await db.scheduleException.create({ data: { scheduleId: lesson.recurringScheduleId, occurrenceDate: lesson.scheduledDate, kind: "OCCURRENCE_OVERRIDE", replacementDate: dateOnly(replacement.date), replacementStartMinute: replacement.startMinute, replacementDurationMinutes: replacement.durationMinutes } });
+  }
   await db.attendance.updateMany({ where: { lessonId }, data: { status: "RESCHEDULED" } });
   await db.lesson.update({ where: { id: lessonId }, data: { status: "RESCHEDULED", manuallyEdited: true } });
   return db.lesson.create({

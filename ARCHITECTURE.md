@@ -59,6 +59,8 @@ Active/current/future Kanban months precede ended months; ended months form the 
 
 A reschedule preserves the original lesson with status `RESCHEDULED` and creates a new lesson whose `originalLessonId` points to it. The replacement is not an additional billable or earned lesson.
 
+The global Calendar is a bounded Week/Month projection of these same `Lesson` records. It does not store calendar-only events. A compact single-occurrence edit updates the existing lesson and marks it manual; an explicit reschedule preserves the original and creates the linked replacement. Cancellation changes status without deleting the occurrence or creating financial credit. Week and Month queries load only their visible date ranges.
+
 ### Attendance
 
 Attendance is recorded per lesson and student, including pair/group lessons. A database uniqueness constraint permits at most one attendance row per lesson/student. Aggregate values such as `4/5` are derived.
