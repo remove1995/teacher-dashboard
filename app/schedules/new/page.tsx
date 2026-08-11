@@ -1,0 +1,5 @@
+import { notFound } from "next/navigation";
+import { createRecurringSchedule } from "@/app/actions/schedules";
+import { ScheduleForm } from "@/components/schedule-form";
+import { prisma } from "@/lib/db/prisma";
+export default async function NewSchedulePage({ searchParams }: { searchParams: Promise<{ studentId?: string; cohortId?: string }> }) { const query = await searchParams; const target = query.studentId ? { type: "student" as const, id: query.studentId } : query.cohortId ? { type: "cohort" as const, id: query.cohortId } : null; if (!target) notFound(); const owner = target.type === "student" ? await prisma.student.findUnique({ where: { id: target.id }, select: { name: true } }) : await prisma.cohort.findUnique({ where: { id: target.id }, select: { name: true } }); if (!owner) notFound(); return <div className="page-stack"><section className="page-heading"><div><p className="eyebrow">Регулярное расписание</p><h1>{owner.name}</h1><p className="lede">Будущие уроки и плановые отметки посещаемости будут созданы автоматически.</p></div></section><ScheduleForm action={createRecurringSchedule} target={target} mode="create" /></div>; }

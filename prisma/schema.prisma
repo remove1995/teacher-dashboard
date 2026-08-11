@@ -1,0 +1,425 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StudentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum CohortKind {
+  PAIR
+  GROUP
+}
+
+enum BillingModel {
+  MONTHLY_PREPAID
+  WEEKLY_PREPAID
+  PAY_PER_LESSON
+  GROUP_SUBSCRIPTION
+}
+
+enum RecurrenceStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum ScheduleExceptionKind {
+  CANCEL
+  OCCURRENCE_OVERRIDE
+  BREAK
+}
+
+enum LessonStatus {
+  PLANNED
+  COMPLETED
+  RESCHEDULED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  RESCHEDULED
+  CANCELLED
+  PLANNED
+}
+
+enum PaymentStatus {
+  EXPECTED
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+}
+
+enum CreditStatus {
+  AVAILABLE
+  APPLIED
+  VOID
+}
+
+enum LearningRecordKind {
+  VOCABULARY
+  GRAMMAR_FUNCTION
+  NOTE
+}
+
+model Student {
+  id                 String             @id @default(cuid())
+  name               String
+  imageUrl           String?
+  color              String
+  status             StudentStatus      @default(ACTIVE)
+  yearOrLevel        String?
+  notesPrivate       String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  memberships        CohortMembership[]
+  individualSchedules RecurringSchedule[] @relation("IndividualSchedule")
+  individualLessons  Lesson[]           @relation("IndividualLesson")
+  attendance         Attendance[]
+  billingProfiles    BillingProfile[]
+  payments           Payment[]
+  credits            Credit[]
+  learningRecords    LearningRecord[]
+  testResults        TestResult[]
+  tags               StudentTag[]
+  lessonPlanningMonths LessonPlanningMonth[] @relation("StudentPlanningMonth")
+}
+
+model Cohort {
+  id              String             @id @default(cuid())
+  name            String
+  kind            CohortKind
+  color           String
+  activeFrom      DateTime           @db.Date
+  activeTo        DateTime?          @db.Date
+  defaultRateMinor Int?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  memberships     CohortMembership[]
+  schedules       RecurringSchedule[]
+  lessons         Lesson[]
+  billingProfiles BillingProfile[]
+  payments        Payment[]
+  learningRecords LearningRecord[]
+  testResults     TestResult[]
+  tags            CohortTag[]
+  lessonPlanningMonths LessonPlanningMonth[] @relation("CohortPlanningMonth")
+}
+
+model LessonPlanningMonth {
+  id        String   @id @default(cuid())
+  studentId String?
+  cohortId  String?
+  month     DateTime @db.Date
+  createdAt DateTime @default(now())
+  student   Student? @relation("StudentPlanningMonth", fields: [studentId], references: [id], onDelete: Cascade)
+  cohort    Cohort?  @relation("CohortPlanningMonth", fields: [cohortId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, month])
+  @@unique([cohortId, month])
+  @@index([month, createdAt])
+}
+
+model CohortMembership {
+  id          String    @id @default(cuid())
+  studentId   String
+  cohortId    String
+  activeFrom  DateTime  @db.Date
+  activeTo    DateTime? @db.Date
+  colorOverride String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  cohort      Cohort    @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, cohortId, activeFrom])
+  @@index([cohortId, activeFrom, activeTo])
+  @@index([studentId, activeFrom, activeTo])
+}
+
+model BillingProfile {
+  id          String       @id @default(cuid())
+  studentId   String
+  cohortId    String?
+  model       BillingModel
+  amountMinor Int
+  effectiveFrom DateTime   @db.Date
+  effectiveTo DateTime?    @db.Date
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  cohort      Cohort?      @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  payments    Payment[]
+
+  @@index([studentId, cohortId, effectiveFrom, effectiveTo])
+}
+
+model RecurringSchedule {
+  id              String             @id @default(cuid())
+  studentId       String?
+  cohortId        String?
+  effectiveFrom   DateTime           @db.Date
+  effectiveTo     DateTime?          @db.Date
+  status          RecurrenceStatus   @default(ACTIVE)
+  timezone        String
+  revision        Int                @default(1)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  student         Student?           @relation("IndividualSchedule", fields: [studentId], references: [id], onDelete: Restrict)
+  cohort          Cohort?            @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  slots           ScheduleSlot[]
+  exceptions      ScheduleException[]
+  lessons         Lesson[]
+
+  @@index([studentId, status])
+  @@index([cohortId, status])
+}
+
+model ScheduleSlot {
+  id          String            @id @default(cuid())
+  scheduleId  String
+  weekday     Int
+  startMinute Int
+  durationMinutes Int
+  schedule    RecurringSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, weekday, startMinute])
+}
+
+model ScheduleException {
+  id             String                @id @default(cuid())
+  scheduleId     String
+  occurrenceDate DateTime              @db.Date
+  kind           ScheduleExceptionKind
+  replacementDate DateTime?            @db.Date
+  replacementStartMinute Int?
+  replacementDurationMinutes Int?
+  note           String?
+  schedule       RecurringSchedule     @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId, occurrenceDate])
+}
+
+model Lesson {
+  id              String        @id @default(cuid())
+  studentId       String?
+  cohortId        String?
+  scheduledDate   DateTime      @db.Date
+  startMinute     Int
+  durationMinutes Int
+  title           String
+  goal            String?
+  homeworkText    String?
+  notes           String?
+  status          LessonStatus  @default(PLANNED)
+  completedAt     DateTime?
+  recurringScheduleId String?
+  scheduleRevision Int?
+  generationKey   String?       @unique
+  manuallyEdited  Boolean       @default(false)
+  kanbanVisible   Boolean       @default(false)
+  kanbanMaterializedAt DateTime?
+  kanbanOrder     Int?
+  originalLessonId String?      @unique
+  colorOverride   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  student         Student?      @relation("IndividualLesson", fields: [studentId], references: [id], onDelete: Restrict)
+  cohort          Cohort?       @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  recurringSchedule RecurringSchedule? @relation(fields: [recurringScheduleId], references: [id], onDelete: SetNull)
+  originalLesson  Lesson?       @relation("LessonReschedule", fields: [originalLessonId], references: [id], onDelete: Restrict)
+  replacementLesson Lesson?     @relation("LessonReschedule")
+  stages          LessonStage[]
+  attendance      Attendance[]
+  credits         Credit[]
+  learningRecords LearningRecord[]
+  testResults     TestResult[]
+  attachments     Attachment[]
+  tags            LessonTag[]
+
+  @@index([scheduledDate, status])
+  @@index([studentId, scheduledDate])
+  @@index([cohortId, scheduledDate])
+  @@index([recurringScheduleId, scheduledDate])
+  @@index([studentId, kanbanVisible, scheduledDate])
+  @@index([cohortId, kanbanVisible, scheduledDate])
+}
+
+model LessonStage {
+  id        String   @id @default(cuid())
+  lessonId  String
+  text      String
+  completed Boolean  @default(false)
+  sortOrder Int
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, sortOrder])
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  lessonId  String
+  studentId String
+  status    AttendanceStatus @default(PLANNED)
+  note      String?
+  manuallyEdited Boolean      @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  lesson    Lesson           @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([lessonId, studentId])
+  @@index([studentId, status])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  studentId       String
+  cohortId        String?
+  billingProfileId String?
+  periodLabel     String
+  periodStart     DateTime      @db.Date
+  periodEnd       DateTime      @db.Date
+  paymentDate     DateTime?     @db.Date
+  suggestedAmountMinor Int
+  actualAmountMinor Int         @default(0)
+  calculationNote String
+  manuallyOverridden Boolean    @default(false)
+  billingModel    BillingModel
+  status          PaymentStatus
+  comment         String?
+  receiptUrl      String?
+  createdAt       DateTime      @default(now())
+  student         Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  cohort          Cohort?       @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  billingProfile  BillingProfile? @relation(fields: [billingProfileId], references: [id], onDelete: SetNull)
+  creditsApplied  Credit[]      @relation("CreditDestinationPayment")
+  attachments     Attachment[]
+
+  @@index([studentId, periodStart, periodEnd])
+  @@index([status, paymentDate])
+}
+
+model Credit {
+  id              String       @id @default(cuid())
+  studentId       String
+  sourceLessonId  String?
+  sourcePeriodLabel String?
+  amountMinor     Int
+  lessonEquivalent Decimal?    @db.Decimal(6, 2)
+  destinationPeriodLabel String?
+  destinationPaymentId String?
+  status          CreditStatus @default(AVAILABLE)
+  confirmedAt     DateTime
+  note            String?
+  createdAt       DateTime     @default(now())
+  student         Student      @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  sourceLesson    Lesson?      @relation(fields: [sourceLessonId], references: [id], onDelete: Restrict)
+  destinationPayment Payment?  @relation("CreditDestinationPayment", fields: [destinationPaymentId], references: [id], onDelete: Restrict)
+
+  @@index([studentId, status])
+}
+
+model LearningRecord {
+  id          String             @id @default(cuid())
+  studentId   String
+  kind        LearningRecordKind
+  entryDate   DateTime           @db.Date
+  title       String
+  content     String?
+  parentFacing Boolean           @default(false)
+  sourceLessonId String?
+  cohortId    String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  student     Student            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  sourceLesson Lesson?           @relation(fields: [sourceLessonId], references: [id], onDelete: SetNull)
+  cohort      Cohort?            @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
+
+  @@index([studentId, entryDate, kind])
+}
+
+model TestResult {
+  id          String    @id @default(cuid())
+  studentId   String
+  title       String
+  testDate    DateTime  @db.Date
+  score       Decimal?  @db.Decimal(8, 2)
+  maxScore    Decimal?  @db.Decimal(8, 2)
+  percentage  Decimal?  @db.Decimal(5, 2)
+  comment     String?
+  sourceLessonId String?
+  cohortId    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  sourceLesson Lesson?  @relation(fields: [sourceLessonId], references: [id], onDelete: SetNull)
+  cohort      Cohort?   @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
+
+  @@index([studentId, testDate])
+}
+
+model Attachment {
+  id               String          @id @default(cuid())
+  fileName         String
+  mediaType        String?
+  externalUrl      String?
+  sizeBytes        Int?
+  lessonId         String?
+  learningRecordId String?
+  testResultId     String?
+  paymentId        String?
+  createdAt        DateTime        @default(now())
+  lesson           Lesson?         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  learningRecord   LearningRecord? @relation(fields: [learningRecordId], references: [id], onDelete: Cascade)
+  testResult       TestResult?     @relation(fields: [testResultId], references: [id], onDelete: Cascade)
+  payment          Payment?        @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([lessonId])
+  @@index([learningRecordId])
+  @@index([testResultId])
+  @@index([paymentId])
+}
+
+model Tag {
+  id       String       @id @default(cuid())
+  name     String       @unique
+  students StudentTag[]
+  cohorts  CohortTag[]
+  lessons  LessonTag[]
+}
+
+model StudentTag {
+  studentId String
+  tagId     String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@id([studentId, tagId])
+}
+
+model CohortTag {
+  cohortId String
+  tagId    String
+  cohort   Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@id([cohortId, tagId])
+}
+
+model LessonTag {
+  lessonId String
+  tagId    String
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@id([lessonId, tagId])
+}
