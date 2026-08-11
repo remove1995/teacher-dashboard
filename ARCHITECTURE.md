@@ -39,6 +39,8 @@ Billing belongs to an individual student within a context. `BillingProfile` ther
 
 The profile stores the billing model and rate/subscription amount. Members of the same cohort may have different prices, billing models, and payment timing.
 
+An active standalone individual learning context is represented by an effective individual `BillingProfile` (`cohortId` is null); pair/group contexts are represented by effective `CohortMembership` records with their own context billing profiles. Student onboarding edits these existing records rather than storing a permanent format enum. Ending a context closes membership and billing effective dates, preserving historical lessons, attendance, payments, and earlier billing profiles.
+
 ### Recurring schedules and lessons
 
 A `RecurringSchedule` belongs to either an individual student or a cohort. Exactly one target must be set. Its weekly rules are stored as `ScheduleSlot` records; holidays, breaks, and one-off changes are represented by `ScheduleException`.
@@ -71,6 +73,8 @@ The global attendance journal is a monthly projection of `Lesson`, `Attendance`,
 
 Payments belong to individual students and may optionally identify a cohort context. Every payment stores a period label plus exact period start/end dates. Payment records are append-only from the product perspective; corrections are represented by new records rather than overwriting financial history.
 
+Payment corrections use `correctsPaymentId`: the original receipt remains immutable and the latest correction replaces it only in financial projections. Multiple partial receipts remain independent current records. Period expected amount is counted once, while received cash is the sum of current receipt versions.
+
 Suggested and actual amounts are stored separately. Manual overrides remain visible and recoverable. Partial payments create additional payment records rather than mutating previous receipts.
 
 Cash received and earned income are separate concepts:
@@ -79,6 +83,8 @@ Cash received and earned income are separate concepts:
 - earned income is based on completed, billable lesson service.
 
 Replacement lessons created by rescheduling must never add a second earned charge for the original service.
+
+Expected payment is derived from the billing profile effective for the period, countable lesson services, and explicit applicable credits. Cash received is grouped by payment date. Earned income resolves the billing profile effective on each completed lesson date, preserving historical rates. For group subscriptions the current MVP recognizes the participant subscription proportionally across countable lessons in that payment period; this allocation policy remains an explicit product decision that can be revised without changing stored receipts.
 
 ### Credits
 

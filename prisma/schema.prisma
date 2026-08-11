@@ -298,15 +298,19 @@ model Payment {
   status          PaymentStatus
   comment         String?
   receiptUrl      String?
+  correctsPaymentId String?      @unique
   createdAt       DateTime      @default(now())
   student         Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
   cohort          Cohort?       @relation(fields: [cohortId], references: [id], onDelete: Restrict)
   billingProfile  BillingProfile? @relation(fields: [billingProfileId], references: [id], onDelete: SetNull)
   creditsApplied  Credit[]      @relation("CreditDestinationPayment")
   attachments     Attachment[]
+  correctsPayment Payment?      @relation("PaymentCorrection", fields: [correctsPaymentId], references: [id], onDelete: Restrict)
+  correction      Payment?      @relation("PaymentCorrection")
 
   @@index([studentId, periodStart, periodEnd])
   @@index([status, paymentDate])
+  @@index([correctsPaymentId])
 }
 
 model Credit {

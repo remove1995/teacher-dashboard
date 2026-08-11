@@ -44,38 +44,83 @@ async function setBilling(tx: Prisma.TransactionClient, input: { studentId: stri
   return tx.billingProfile.create({ data: { ...input, effectiveFrom } });
 }
 
-function studentInput(formData: FormData, billingEffectiveFrom: string) {
+function studentInput(formData: FormData) {
   const status = required(formData, "status") as StudentStatus;
-  const model = required(formData, "billingModel") as BillingModel;
-  if (!studentStatuses.has(status) || !billingModels.has(model)) throw new Error("Invalid student status or billing model");
+  if (!studentStatuses.has(status)) throw new Error("Invalid student status");
   return {
     student: { name: required(formData, "name"), imageUrl: optional(formData, "imageUrl"), color: required(formData, "color"), status, yearOrLevel: optional(formData, "yearOrLevel"), notesPrivate: optional(formData, "notesPrivate") },
     tagNames: tags(formData),
-    billing: { model, amountMinor: moneyMinor(required(formData, "rate")), effectiveFrom: billingEffectiveFrom },
   };
 }
 
+function contextBilling(formData: FormData, prefix: string) {
+  const model = required(formData, `billingModel:${prefix}`) as BillingModel;
+  if (!billingModels.has(model)) throw new Error("Invalid billing model");
+  return { model, amountMinor: moneyMinor(required(formData, `rate:${prefix}`)) };
+}
+
+async function endBillingContext(tx: Prisma.TransactionClient, studentId: string, cohortId: string | null, effectiveFrom: string) {
+  const end = dateOnly(previousDate(effectiveFrom));
+  await tx.billingProfile.updateMany({
+    where: { studentId, cohortId, OR: [{ effectiveTo: null }, { effectiveTo: { gte: dateOnly(effectiveFrom) } }] },
+    data: { effectiveTo: end },
+  });
+}
+
+async function syncStudentContexts(tx: Prisma.TransactionClient, studentId: string, formData: FormData, effectiveFrom: string) {
+  const individualEnabled = formData.has("individualEnabled");
+  const selectedCohortIds = [...new Set(formData.getAll("contextCohortIds").map(String))];
+  if (!individualEnabled && selectedCohortIds.length === 0) throw new Error("Выберите хотя бы один формат обучения");
+
+  const effectiveDate = dateOnly(effectiveFrom);
+  const activeMemberships = await tx.cohortMembership.findMany({
+    where: { studentId, activeFrom: { lte: effectiveDate }, OR: [{ activeTo: null }, { activeTo: { gte: effectiveDate } }] },
+  });
+  const activeIds = new Set(activeMemberships.map((membership) => membership.cohortId));
+  const selectedIds = new Set(selectedCohortIds);
+  const removedIds = [...activeIds].filter((id) => !selectedIds.has(id));
+  if (removedIds.length) {
+    const end = dateOnly(previousDate(effectiveFrom));
+    await tx.cohortMembership.updateMany({ where: { studentId, cohortId: { in: removedIds }, id: { in: activeMemberships.map((membership) => membership.id) } }, data: { activeTo: end } });
+    for (const cohortId of removedIds) await endBillingContext(tx, studentId, cohortId, effectiveFrom);
+  }
+
+  const cohorts = await tx.cohort.findMany({ where: { id: { in: selectedCohortIds } }, select: { id: true } });
+  if (cohorts.length !== selectedCohortIds.length) throw new Error("Один из выбранных учебных контекстов недоступен");
+  for (const cohortId of selectedCohortIds) {
+    if (!activeIds.has(cohortId)) await tx.cohortMembership.create({ data: { studentId, cohortId, activeFrom: effectiveDate } });
+    await setBilling(tx, { studentId, cohortId, effectiveFrom, ...contextBilling(formData, `cohort:${cohortId}`) });
+  }
+
+  if (individualEnabled) await setBilling(tx, { studentId, cohortId: null, effectiveFrom, ...contextBilling(formData, "individual") });
+  else await endBillingContext(tx, studentId, null, effectiveFrom);
+}
+
 export async function createStudent(formData: FormData) {
-  const input = studentInput(formData, todayDate());
+  const input = studentInput(formData);
+  const effectiveFrom = todayDate();
   const student = await prisma.$transaction(async (tx) => {
     const created = await tx.student.create({ data: input.student });
     await replaceTags(tx, { studentId: created.id }, input.tagNames);
-    await setBilling(tx, { studentId: created.id, cohortId: null, ...input.billing });
+    await syncStudentContexts(tx, created.id, formData, effectiveFrom);
     return created;
   });
   revalidatePath("/students");
+  revalidatePath("/payments");
   redirect(`/students/${student.id}`);
 }
 
 export async function updateStudent(studentId: string, formData: FormData) {
-  const input = studentInput(formData, optional(formData, "rateChangeFrom") ?? todayDate());
+  const input = studentInput(formData);
+  const effectiveFrom = optional(formData, "contextEffectiveFrom") ?? todayDate();
   await prisma.$transaction(async (tx) => {
     await tx.student.update({ where: { id: studentId }, data: input.student });
     await replaceTags(tx, { studentId }, input.tagNames);
-    await setBilling(tx, { studentId, cohortId: null, ...input.billing });
+    await syncStudentContexts(tx, studentId, formData, effectiveFrom);
   });
   revalidatePath("/students");
   revalidatePath(`/students/${studentId}`);
+  revalidatePath("/payments");
   redirect(`/students/${studentId}`);
 }
 

@@ -6,7 +6,7 @@ type StudentOption = { id: string; name: string };
 type MemberValue = { studentId: string; billing?: { model: BillingModel; amountMinor: number; effectiveFrom: Date } };
 type Values = { name: string; kind: CohortKind; color: string; activeFrom: Date; activeTo: Date | null; defaultRateMinor: number | null; tags: string[]; members: MemberValue[] };
 
-export function CohortForm({ action, students, values, initialKind }: { action: (formData: FormData) => void | Promise<void>; students: StudentOption[]; values?: Values; initialKind: CohortKind }) {
+export function CohortForm({ action, students, values, initialKind, initialMemberIds = [] }: { action: (formData: FormData) => void | Promise<void>; students: StudentOption[]; values?: Values; initialKind: CohortKind; initialMemberIds?: string[] }) {
   const kind = values?.kind ?? initialKind;
   const memberMap = new Map(values?.members.map((member) => [member.studentId, member]));
   return <form action={action} className="editor-form">
@@ -21,7 +21,7 @@ export function CohortForm({ action, students, values, initialKind }: { action: 
     </div></section>
     <section className="form-section"><div><p className="eyebrow">Состав и цены</p><h2>Участники</h2><p className="section-help">{kind === "PAIR" ? "Выберите ровно двух учеников." : "Выберите минимум двух учеников."} Оплата задаётся для каждого участника отдельно.</p></div><div className="member-editor">
       {students.map((student) => { const member = memberMap.get(student.id); return <article className="member-row" key={student.id}>
-        <label className="member-toggle"><input type="checkbox" name="memberIds" value={student.id} defaultChecked={Boolean(member)} /><strong>{student.name}</strong></label>
+        <label className="member-toggle"><input type="checkbox" name="memberIds" value={student.id} defaultChecked={Boolean(member) || initialMemberIds.includes(student.id)} /><strong>{student.name}</strong></label>
         <label className="field"><span>Модель оплаты</span><select name={`billingModel:${student.id}`} defaultValue={member?.billing?.model ?? (kind === "GROUP" ? "GROUP_SUBSCRIPTION" : "PAY_PER_LESSON")}>{Object.entries(billingLabels).map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
         <label className="field"><span>Цена, ₽</span><input name={`rate:${student.id}`} type="number" min="0" defaultValue={(member?.billing?.amountMinor ?? values?.defaultRateMinor ?? (kind === "GROUP" ? 450000 : 200000)) / 100} /></label>
         {member?.billing ? <label className="field"><span>Новые условия с</span><input name={`rateChangeFrom:${student.id}`} type="date" defaultValue={new Date().toISOString().slice(0,10)} /><small>Только при изменении цены или модели.</small></label> : <div className="member-billing-note">Начало тарифа установится автоматически.</div>}

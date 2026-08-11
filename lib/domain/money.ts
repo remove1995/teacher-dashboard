@@ -1,8 +1,6 @@
-export type BillingModel =
-  | "MONTHLY_PREPAID"
-  | "WEEKLY_PREPAID"
-  | "PAY_PER_LESSON"
-  | "GROUP_SUBSCRIPTION";
+export type BillingModel = "MONTHLY_PREPAID" | "WEEKLY_PREPAID" | "PAY_PER_LESSON" | "GROUP_SUBSCRIPTION";
+export type FinanceEntityKind = "INDIVIDUAL" | "PAIR" | "GROUP";
+export type DerivedPaymentStatus = "EXPECTED" | "PARTIALLY_PAID" | "PAID" | "OVERPAID";
 
 export type PaymentSuggestionInput = {
   model: BillingModel;
@@ -16,7 +14,24 @@ export type PaymentSuggestion = {
   amountMinor: number;
   grossAmountMinor: number;
   creditAppliedMinor: number;
+  lessonCount: number | null;
   explanation: string;
+};
+
+export type PaymentVersion = {
+  id: string;
+  correctsPaymentId?: string | null;
+  actualAmountMinor: number;
+  suggestedAmountMinor: number;
+  paymentDate?: Date | null;
+};
+
+export type LessonEarning = {
+  id: string;
+  status: string;
+  scheduledDate?: Date;
+  originalLessonId?: string | null;
+  valueMinor: number;
 };
 
 function assertMinorUnits(value: number, name: string) {
@@ -29,46 +44,64 @@ function count(value: number | undefined, name: string) {
   return resolved;
 }
 
+const calculationMoney = (minor: number) => `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(minor / 100)} ₽`;
+
 export function suggestPayment(input: PaymentSuggestionInput): PaymentSuggestion {
   assertMinorUnits(input.unitAmountMinor, "unitAmountMinor");
   const credit = input.availableCreditMinor ?? 0;
   assertMinorUnits(credit, "availableCreditMinor");
 
-  if (input.model === "GROUP_SUBSCRIPTION") {
-    return { amountMinor: input.unitAmountMinor, grossAmountMinor: input.unitAmountMinor, creditAppliedMinor: 0, explanation: "Participant subscription price" };
-  }
-
-  const lessonCount = input.model === "PAY_PER_LESSON"
-    ? count(input.completedUnpaidLessonCount, "completedUnpaidLessonCount")
-    : count(input.scheduledLessonCount, "scheduledLessonCount");
-  const gross = lessonCount * input.unitAmountMinor;
+  const lessonCount = input.model === "GROUP_SUBSCRIPTION"
+    ? null
+    : input.model === "PAY_PER_LESSON"
+      ? count(input.completedUnpaidLessonCount, "completedUnpaidLessonCount")
+      : count(input.scheduledLessonCount, "scheduledLessonCount");
+  const gross = lessonCount === null ? input.unitAmountMinor : lessonCount * input.unitAmountMinor;
   if (!Number.isSafeInteger(gross)) throw new Error("calculated amount exceeds safe integer range");
-  const applicableCredit = input.model === "MONTHLY_PREPAID" ? Math.min(credit, gross) : 0;
-  const label = input.model === "PAY_PER_LESSON" ? "completed unpaid lessons" : "scheduled lessons";
+  const appliedCredit = Math.min(credit, gross);
+  const amountMinor = gross - appliedCredit;
+  const base = input.model === "GROUP_SUBSCRIPTION"
+    ? `Абонемент: ${calculationMoney(input.unitAmountMinor)}`
+    : `${lessonCount} × ${calculationMoney(input.unitAmountMinor)}`;
   return {
-    amountMinor: gross - applicableCredit,
+    amountMinor,
     grossAmountMinor: gross,
-    creditAppliedMinor: applicableCredit,
-    explanation: `${lessonCount} ${label} × ${input.unitAmountMinor}${applicableCredit ? ` − ${applicableCredit} credit` : ""}`,
+    creditAppliedMinor: appliedCredit,
+    lessonCount,
+    explanation: `${base}${appliedCredit ? ` − кредит ${calculationMoney(appliedCredit)}` : ""}`,
   };
 }
 
-export function paymentStatus(expectedMinor: number, paidMinor: number, overdue = false) {
+export function paymentStatus(expectedMinor: number, receivedMinor: number): DerivedPaymentStatus {
   assertMinorUnits(expectedMinor, "expectedMinor");
-  assertMinorUnits(paidMinor, "paidMinor");
-  if (paidMinor >= expectedMinor) return "PAID" as const;
-  if (paidMinor > 0) return "PARTIALLY_PAID" as const;
-  return overdue ? "OVERDUE" as const : "EXPECTED" as const;
+  assertMinorUnits(receivedMinor, "receivedMinor");
+  if (receivedMinor > expectedMinor) return "OVERPAID";
+  if (expectedMinor > 0 && receivedMinor === expectedMinor) return "PAID";
+  if (receivedMinor > 0) return "PARTIALLY_PAID";
+  return "EXPECTED";
 }
 
-export function cashReceived(payments: Array<{ actualAmountMinor: number; status: string }>) {
-  return payments.reduce((sum, payment) => {
-    assertMinorUnits(payment.actualAmountMinor, "actualAmountMinor");
-    return payment.status === "PAID" || payment.status === "PARTIALLY_PAID" ? sum + payment.actualAmountMinor : sum;
-  }, 0);
+export function currentPaymentVersions<T extends PaymentVersion>(payments: T[]): T[] {
+  const superseded = new Set(payments.map((payment) => payment.correctsPaymentId).filter((id): id is string => Boolean(id)));
+  return payments.filter((payment) => !superseded.has(payment.id));
 }
 
-export function earnedIncome(lessons: Array<{ id: string; status: string; valueMinor: number; originalLessonId?: string | null }>) {
+export function cumulativeReceived(payments: PaymentVersion[]) {
+  return currentPaymentVersions(payments).reduce((sum, payment) => sum + payment.actualAmountMinor, 0);
+}
+
+export function expectedForPaymentPeriod(payments: PaymentVersion[], fallback = 0) {
+  const current = currentPaymentVersions(payments);
+  return current.length ? current.reduce((maximum, payment) => Math.max(maximum, payment.suggestedAmountMinor), 0) : fallback;
+}
+
+export const paymentAccountKey = (studentId: string, cohortId: string | null) => `${studentId}:${cohortId ?? "individual"}`;
+
+export function cashReceived(payments: Array<PaymentVersion & { paymentDate?: Date | null }>) {
+  return cumulativeReceived(payments.filter((payment) => payment.paymentDate));
+}
+
+export function earnedIncome(lessons: LessonEarning[]) {
   const countedServices = new Set<string>();
   return lessons.reduce((sum, lesson) => {
     assertMinorUnits(lesson.valueMinor, "valueMinor");
@@ -77,4 +110,35 @@ export function earnedIncome(lessons: Array<{ id: string; status: string; valueM
     countedServices.add(serviceId);
     return sum + lesson.valueMinor;
   }, 0);
+}
+
+export function resolveEffectiveRate<T extends { effectiveFrom: Date; effectiveTo?: Date | null }>(profiles: T[], date: Date): T | null {
+  return profiles
+    .filter((profile) => profile.effectiveFrom <= date && (!profile.effectiveTo || profile.effectiveTo >= date))
+    .sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime())[0] ?? null;
+}
+
+export function resolveProfileForPeriod<T extends { effectiveFrom: Date; effectiveTo?: Date | null }>(profiles: T[], start: Date, end: Date): T | null {
+  return profiles
+    .filter((profile) => profile.effectiveFrom <= end && (!profile.effectiveTo || profile.effectiveTo >= start))
+    .sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime())[0] ?? null;
+}
+
+export function resolveManualSuggestion(calculatedMinor: number, enteredMinor: number | null) {
+  assertMinorUnits(calculatedMinor, "calculatedMinor");
+  if (enteredMinor === null) return { amountMinor: calculatedMinor, manuallyOverridden: false };
+  assertMinorUnits(enteredMinor, "enteredMinor");
+  return { amountMinor: enteredMinor, manuallyOverridden: enteredMinor !== calculatedMinor };
+}
+
+export function filterFinanceRows<T extends { kind: FinanceEntityKind; name: string; searchText?: string; status: DerivedPaymentStatus }>(
+  rows: T[],
+  filters: { kind?: "ALL" | FinanceEntityKind; status?: "ALL" | DerivedPaymentStatus; search?: string },
+) {
+  const needle = filters.search?.trim().toLocaleLowerCase("ru-RU") ?? "";
+  return rows.filter((row) =>
+    (!filters.kind || filters.kind === "ALL" || row.kind === filters.kind)
+    && (!filters.status || filters.status === "ALL" || row.status === filters.status)
+    && (!needle || (row.searchText ?? row.name).toLocaleLowerCase("ru-RU").includes(needle)),
+  );
 }
