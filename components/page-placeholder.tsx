@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 
 type PagePlaceholderProps = {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
   actions?: ReactNode;
   children?: ReactNode;
 };
@@ -13,9 +13,9 @@ export function PagePlaceholder({ eyebrow, title, description, actions, children
     <div className="page-stack">
       <section className="page-heading">
         <div>
-          <p className="eyebrow">{eyebrow}</p>
+          {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
           <h1>{title}</h1>
-          <p className="lede">{description}</p>
+          {description ? <p className="lede">{description}</p> : null}
         </div>
         {actions ? <div className="heading-actions">{actions}</div> : null}
       </section>

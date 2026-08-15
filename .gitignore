@@ -4,4 +4,5 @@ coverage
 .env
 .env.local
 *.log
-
+public/uploads/learning/*
+!public/uploads/learning/.gitkeep

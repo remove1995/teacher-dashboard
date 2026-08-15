@@ -16,7 +16,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   const rows = filterFinanceRows(workspace.rows, { kind: kind as "ALL" | FinanceEntityKind, status: status as "ALL" | DerivedPaymentStatus, search: search.q });
   const query = (next: Partial<Search>) => new URLSearchParams(Object.entries({ month: period.key, kind, status, q: search.q ?? "", ...next }).filter(([, value]) => value)).toString();
   return <div className="page-stack payments-workspace">
-    <header className="page-heading payment-heading"><div><span className="eyebrow">Финансы</span><h1>Оплаты</h1><p>Полученные деньги и заработанный доход считаются отдельно.</p></div><a className="button" href={`?${query({ add: rows.flatMap((row) => row.participants)[0]?.key })}`}>Добавить оплату</a></header>
+    <header className="page-heading payment-heading"><h1>Оплаты</h1><a className="button" href={`?${query({ add: rows.flatMap((row) => row.participants)[0]?.key })}`}>Добавить оплату</a></header>
     <section className="payment-controls">
       <div className="payment-month"><Link href={`?${query({ month: shiftMonth(period, -1) })}`}>‹</Link><label><input type="month" defaultValue={period.key}/><strong>{period.label}</strong></label><Link href={`?${query({ month: shiftMonth(period, 1) })}`}>›</Link></div>
       <nav className="payment-kind-filter">{Object.entries(kindLabels).map(([value, label]) => <Link className={kind === value ? "active" : ""} key={value} href={`?${query({ kind: value })}`}>{label}</Link>)}</nav>

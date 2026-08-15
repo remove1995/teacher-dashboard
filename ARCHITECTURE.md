@@ -96,9 +96,11 @@ A student absence from a group subscription creates no credit when the group les
 
 ### Learning records and attachments
 
-Every `LearningRecord` is owned by one student. It may optionally reference a source lesson and/or cohort context. Group material can later be copied into several individually owned records.
+Every `LearningRecord` is owned by one student. It may optionally reference a source lesson and/or cohort context. Group material can later be copied into several individually owned records. `LearningRecord.note` keeps an optional teacher note separate from multiline learning content. The learning-profile UI projects `LearningRecord` and `TestResult` into one chronological stream while retaining their distinct persistence models.
 
-Attachments are metadata only in this foundation. `Attachment` records store names, media types, external URLs, sizes, and contextual links. No binary upload or file-storage service is included.
+`Attachment` records store names, media types, URLs, sizes, and contextual links. Learning Profile uploads use a replaceable storage adapter; the local implementation writes to `public/uploads/learning` and stores the resulting metadata in PostgreSQL. This is suitable for one local application instance, but deployment must replace it with persistent shared/object storage.
+
+Parent feedback is generated deterministically as an editable, unsaved draft from a read-only projection of learning records within a selected date period and category set. Report generation does not mutate or duplicate learning records; future AI rewriting, persisted report history, templates, and PDF output can build on this boundary.
 
 ## Key Invariants
 

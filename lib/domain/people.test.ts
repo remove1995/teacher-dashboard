@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { billableContextKeys, COHORT_EDITABLE_FIELDS, contextActiveInPeriod, normalizeTags, planMembershipChanges, STUDENT_EDITABLE_FIELDS } from "./people";
+import { billableContextKeys, COHORT_EDITABLE_FIELDS, contextActiveInPeriod, hasIndividualLearningContext, normalizeTags, planMembershipChanges, STUDENT_EDITABLE_FIELDS } from "./people";
 
 const augustStart = new Date("2026-08-01");
 const augustEnd = new Date("2026-08-31");
 
 describe("existing entity edits", () => {
+  it("recognizes only explicit individual learning contexts", () => {
+    expect(hasIndividualLearningContext({ individualSchedules: [{}], billingProfiles: [] })).toBe(true);
+    expect(hasIndividualLearningContext({ individualSchedules: [], billingProfiles: [{}] })).toBe(true);
+    expect(hasIndividualLearningContext({ individualSchedules: [], billingProfiles: [] })).toBe(false);
+  });
   it("keeps creation and editing parity including learning-context controls", () => {
     expect(STUDENT_EDITABLE_FIELDS).toEqual(expect.arrayContaining(["name", "learningContexts", "contextBilling", "contextEffectiveFrom", "notesPrivate", "imageUrl"]));
   });

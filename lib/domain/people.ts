@@ -5,6 +5,13 @@ export function normalizeTags(value: string) {
   return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
 }
 
+export function hasIndividualLearningContext(student: {
+  individualSchedules: readonly unknown[];
+  billingProfiles: readonly unknown[];
+}) {
+  return student.individualSchedules.length > 0 || student.billingProfiles.length > 0;
+}
+
 export function planMembershipChanges(existingIds: string[], selectedIds: string[]) {
   const existing = new Set(existingIds);
   const selected = new Set(selectedIds);

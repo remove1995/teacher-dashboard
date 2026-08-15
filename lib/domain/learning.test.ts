@@ -1,0 +1,21 @@
+import{describe,expect,it}from"vitest";import{attachmentMetadata,contextFromSourceLesson,createLearningEntry,deleteLearningEntry,editLearningEntry,filterLearningEntries,scopedLearningAddType,searchLearningEntries,sortLearningEntries,testPercentage,type LearningEntry}from"./learning";
+const entry=(overrides:Partial<LearningEntry>={}):LearningEntry=>({id:"one",type:"VOCABULARY",date:"2026-08-10",title:"Food",content:"salad\napple juice",note:null,score:null,maxScore:null,percentage:null,sourceLessonId:null,cohortId:null,attachments:[],...overrides});
+describe("learning records",()=>{
+ it("creates Vocabulary and preserves multiline content",()=>expect(createLearningEntry(entry()).content).toBe("salad\napple juice"));
+ it("creates Grammar / Functions",()=>expect(createLearningEntry(entry({type:"GRAMMAR_FUNCTION",title:"Comparatives",content:"cheaper than\nmore exciting than"}))).toMatchObject({type:"GRAMMAR_FUNCTION",title:"Comparatives"}));
+ it("creates a Teacher Note",()=>expect(createLearningEntry(entry({type:"NOTE",title:"Speaking",content:null,note:"Avoids speaking unless prompted"})).note).toContain("prompted"));
+ it("creates a scored Test",()=>expect(testPercentage(18,20)).toBe(90));
+ it("supports a qualitative Test without score",()=>expect(testPercentage(null,null)).toBeNull());
+ it("edits the existing record without changing identity",()=>expect(editLearningEntry(entry(),{title:"Food and drink"})).toMatchObject({id:"one",title:"Food and drink"}));
+ it("deletes only the selected record",()=>expect(deleteLearningEntry([entry(),entry({id:"two"})],"one").map(({id})=>id)).toEqual(["two"]));
+ it("filters by exact type",()=>expect(filterLearningEntries([entry(),entry({id:"g",type:"GRAMMAR_FUNCTION"})],"GRAMMAR_FUNCTION").map(({id})=>id)).toEqual(["g"]));
+ it("searches title, material, and teacher comments",()=>expect(searchLearningEntries([entry(),entry({id:"g",title:"Comparatives",content:"cheaper than"})],"comparatives").map(({id})=>id)).toEqual(["g"]));
+ it("allows an optional lesson link",()=>expect(createLearningEntry(entry({sourceLessonId:"lesson"})).sourceLessonId).toBe("lesson"));
+ it("allows standalone records",()=>expect(createLearningEntry(entry()).sourceLessonId).toBeNull());
+ it("keeps student ownership independent from multiple contexts",()=>expect(sortLearningEntries([entry({id:"individual",cohortId:null}),entry({id:"group",cohortId:"group",date:"2026-08-11"})]).map(({id})=>id)).toEqual(["group","individual"]));
+ it("survives membership ending because context is metadata",()=>expect(editLearningEntry(entry({cohortId:"ended-group"}),{note:"Historical"}).cohortId).toBe("ended-group"));
+ it("persists attachment metadata",()=>expect(attachmentMetadata("work.pdf","https://files.test/work.pdf","application/pdf")).toEqual({fileName:"work.pdf",externalUrl:"https://files.test/work.pdf",mediaType:"application/pdf"}));
+ it.each([["VOCABULARY","VOCABULARY"],["GRAMMAR_FUNCTION","GRAMMAR_FUNCTION"],["NOTE","NOTE"],["TEST","TEST"]] as const)("%s tab creates its scoped record directly",(tab,expected)=>expect(scopedLearningAddType(tab)).toBe(expected));
+ it("derives context from the source lesson",()=>expect(contextFromSourceLesson({cohortId:"group"})).toBe("group"));
+ it("standalone records work without context",()=>expect(contextFromSourceLesson(null)).toBeNull());
+});

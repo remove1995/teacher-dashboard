@@ -3,7 +3,7 @@ import { PagePlaceholder } from "@/components/page-placeholder";
 
 export default function DashboardPage() {
   return (
-    <PagePlaceholder eyebrow="Сегодня · демонстрационный режим" title="Добрый день" description="Короткий обзор уроков, внимания и финансов — без лишней аналитики.">
+    <PagePlaceholder title="Добрый день, Олеся!">
       <section className="summary-grid" aria-label="Сводка">
         <article className="summary-card"><span>Уроков сегодня</span><strong>4</strong><small>Следующий в 14:30</small></article>
         <article className="summary-card"><span>На этой неделе</span><strong>17</strong><small>12 уже завершено</small></article>

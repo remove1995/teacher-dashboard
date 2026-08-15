@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { addLessonStage, addLessonTag, materializeLesson, moveLessonOnMobile, deleteLessonStage, removeLessonTag, reorderLessonStages, toggleLessonStage, updateLessonDate, updateLessonField, updateLessonStage } from "@/app/actions/lessons";
 import { suggestDateInMonth } from "@/lib/domain/lesson";
+import { ShareActions } from "@/components/share-actions";
 
 export function EntitySwitcher({ entities, selected }: { entities: Array<{ value: string; label: string; kind: string }>; selected: string }) {
   const router = useRouter();
@@ -22,7 +23,7 @@ export function AutoSaveField({ lessonId, field, value, label, multiline = false
     const data = new FormData(); data.set("value", next);
     startTransition(async () => { await updateLessonField(lessonId, field, data); initial.current = next; router.refresh(); });
   };
-  return <label className={`lesson-inline-field ${multiline ? "is-multiline" : ""}`}><span>{label}{pending ? <small>Сохраняю…</small> : null}</span>{multiline ? <textarea value={currentValue} onChange={(event)=>setCurrentValue(event.target.value)} placeholder={placeholder} rows={field === "notes" ? 4 : 3} onBlur={(event) => save(event.currentTarget.value)} /> : <input value={currentValue} onChange={(event)=>setCurrentValue(event.target.value)} placeholder={placeholder} onBlur={(event) => save(event.currentTarget.value)} />}</label>;
+  return <div className={`lesson-inline-field ${multiline ? "is-multiline" : ""}`}><label><span>{label}{pending ? <small>Сохраняю…</small> : null}</span>{multiline ? <textarea value={currentValue} onChange={(event)=>setCurrentValue(event.target.value)} placeholder={placeholder} rows={field === "notes" ? 4 : 3} onBlur={(event) => save(event.currentTarget.value)} /> : <input value={currentValue} onChange={(event)=>setCurrentValue(event.target.value)} placeholder={placeholder} onBlur={(event) => save(event.currentTarget.value)} />}</label>{field === "homeworkText" && <ShareActions title="Домашнее задание" text={currentValue} copyLabel="Скопировать" />}</div>;
 }
 
 type Stage = { id: string; text: string; completed: boolean; sortOrder: number };

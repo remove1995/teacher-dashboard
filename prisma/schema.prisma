@@ -340,6 +340,7 @@ model LearningRecord {
   entryDate   DateTime           @db.Date
   title       String
   content     String?
+  note        String?
   parentFacing Boolean           @default(false)
   sourceLessonId String?
   cohortId    String?
