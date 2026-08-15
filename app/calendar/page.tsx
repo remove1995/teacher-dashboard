@@ -3,6 +3,7 @@ import { CalendarWorkspace, type CalendarEvent } from "@/components/calendar-wor
 import { filterCalendarEvents, monthRange, shiftCalendarFocus, weekRange, type CalendarKind, type CalendarView } from "@/lib/domain/calendar";
 import { todayDate } from "@/lib/domain/dates";
 import { prisma } from "@/lib/db/prisma";
+import { getTeacherSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 type Search={view?:string;date?:string;kind?:string;lesson?:string;add?:string};
@@ -10,7 +11,7 @@ const kinds={ALL:"Все",INDIVIDUAL:"Индивидуальные",PAIR:"Пар
 const iso=(date:Date)=>date.toISOString().slice(0,10);
 
 export default async function CalendarPage({searchParams}:{searchParams:Promise<Search>}){
-  const search=await searchParams; const today=todayDate("Europe/Moscow");
+  const [search,settings]=await Promise.all([searchParams,getTeacherSettings()]); const today=todayDate(settings.timezone);
   const focus=/^\d{4}-\d{2}-\d{2}$/.test(search.date??"")?search.date!:today;
   const view:CalendarView=search.view==="month"?"month":"week";
   const kind=Object.hasOwn(kinds,search.kind??"")?search.kind as keyof typeof kinds:"ALL";
@@ -33,6 +34,6 @@ export default async function CalendarPage({searchParams}:{searchParams:Promise<
   return <div className="page-stack global-calendar"><header className="page-heading calendar-heading"><h1>Календарь</h1><div className="wrap-actions"><Link className="secondary-button" href={href({add:"1"})}>+ Добавить урок</Link></div></header>
     <section className="calendar-toolbar"><div className="calendar-navigation"><Link href={href({date:prev})}>‹</Link><Link className="calendar-today" href={`?view=${view}&date=${today}&kind=${kind}`}>Сегодня</Link><Link href={href({date:next})}>›</Link><strong>{periodLabel}</strong></div><nav className="calendar-view-toggle"><Link className={view==="week"?"active":""} href={href({view:"week"})}>Неделя</Link><Link className={view==="month"?"active":""} href={href({view:"month"})}>Месяц</Link></nav></section>
     <nav className="calendar-filters">{Object.entries(kinds).map(([value,label])=><Link className={kind===value?"active":""} href={href({kind:value})} key={value}>{label}</Link>)}</nav>
-    <CalendarWorkspace key={`${view}:${focus}:${kind}`} events={events} days={days} view={view} focus={focus} today={today} selected={selected} addOpen={search.add==="1"} targets={targets} baseQuery={`view=week&kind=${kind}`}/>
+    <CalendarWorkspace key={`${view}:${focus}:${kind}`} events={events} days={days} view={view} focus={focus} today={today} selected={selected} addOpen={search.add==="1"} targets={targets} baseQuery={`view=week&kind=${kind}`} defaultLessonDuration={settings.defaultLessonDuration}/>
   </div>;
 }

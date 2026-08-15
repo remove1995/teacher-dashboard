@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { copyLessonPlan, reorderStages } from "@/lib/domain/lesson";
 import { dateOnly, timeToMinute } from "@/lib/domain/dates";
 import { attendanceAfterLessonCompletion, attendanceAfterUndoCompletion } from "@/lib/domain/attendance";
+import { getTeacherSettings } from "@/lib/settings";
 
 const planned = () => ({ manuallyEdited: true, kanbanVisible: true });
 
@@ -63,13 +64,14 @@ export async function materializeLesson(targetType: "student" | "cohort", target
   const scheduledDate = dateOnly(scheduledDateText);
   const startMinute = timeToMinute(required(formData, "startTime"));
   const requestedTitle = String(formData.get("title") ?? "").trim();
+  const settings = await getTeacherSettings();
   const lesson = await prisma.$transaction(async (tx) => {
     const targetWhere = targetType === "student" ? { studentId: targetId } : { cohortId: targetId };
     const candidate = candidateId ? await tx.lesson.findFirst({ where: { id: candidateId, ...targetWhere, recurringScheduleId: { not: null } } }) : null;
     const order = await tx.lesson.aggregate({ where: { ...targetWhere, kanbanVisible: true, scheduledDate: { gte: dateOnly(`${scheduledDateText.slice(0,7)}-01`), lt: new Date(Date.UTC(scheduledDate.getUTCFullYear(),scheduledDate.getUTCMonth()+1,1)) } }, _max: { kanbanOrder: true } });
     if (candidate) return candidate.kanbanVisible ? candidate : tx.lesson.update({ where: { id: candidate.id }, data: { scheduledDate, startMinute, title: requestedTitle || candidate.title, ...planned(), kanbanMaterializedAt: new Date(), kanbanOrder: (order._max.kanbanOrder ?? -1)+1 } });
     const attendanceStudentIds = targetType === "student" ? [targetId] : (await tx.cohortMembership.findMany({ where: { cohortId: targetId, activeFrom: { lte: scheduledDate }, OR: [{ activeTo: null }, { activeTo: { gte: scheduledDate } }] }, select: { studentId: true } })).map(({studentId})=>studentId);
-    return tx.lesson.create({ data: { studentId: targetType === "student" ? targetId : null, cohortId: targetType === "cohort" ? targetId : null, scheduledDate, startMinute, durationMinutes: 60, title: requestedTitle || "Новый урок", ...planned(), kanbanMaterializedAt: new Date(), kanbanOrder: (order._max.kanbanOrder ?? -1)+1, attendance: { create: attendanceStudentIds.map((studentId)=>({studentId,status:"PLANNED"})) } } });
+    return tx.lesson.create({ data: { studentId: targetType === "student" ? targetId : null, cohortId: targetType === "cohort" ? targetId : null, scheduledDate, startMinute, durationMinutes: settings.defaultLessonDuration, title: requestedTitle || "Новый урок", ...planned(), kanbanMaterializedAt: new Date(), kanbanOrder: (order._max.kanbanOrder ?? -1)+1, attendance: { create: attendanceStudentIds.map((studentId)=>({studentId,status:"PLANNED"})) } } });
   });
   refreshLessons();
   return { id:lesson.id, scheduledDate:scheduledDateText };

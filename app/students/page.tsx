@@ -42,7 +42,6 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
   return <div className="page-stack students-list-page">
     <section className="page-heading students-list-heading">
       <h1>Ученики</h1>
-      <img className="students-page-decoration" src="/images/students-vase-transparent.png" alt="" aria-hidden="true" />
     </section>
 
     <section className="students-toolbar" aria-label="Управление списком учеников">

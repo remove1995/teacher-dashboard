@@ -5,6 +5,11 @@ const prisma = new PrismaClient();
 const date = (value: string) => new Date(`${value}T00:00:00.000Z`);
 
 async function main() {
+  await prisma.teacherSettings.upsert({
+    where: { id: "primary" },
+    update: { displayName: "Маша", timezone: "Europe/Moscow", defaultLessonDuration: 60, currency: "RUB" },
+    create: { id: "primary", displayName: "Маша", timezone: "Europe/Moscow", defaultLessonDuration: 60, currency: "RUB" },
+  });
   await prisma.attachment.deleteMany();
   await prisma.lessonTag.deleteMany();
   await prisma.cohortTag.deleteMany();

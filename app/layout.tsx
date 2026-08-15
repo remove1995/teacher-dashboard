@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
+import { getTeacherSettings } from "@/lib/settings";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,11 +8,12 @@ export const metadata: Metadata = {
   description: "Planning, attendance, payments, and learning records for tutors.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const settings = await getTeacherSettings();
   return (
     <html lang="ru">
       <body>
-        <AppShell>{children}</AppShell>
+        <AppShell teacherName={settings.displayName}>{children}</AppShell>
       </body>
     </html>
   );

@@ -71,6 +71,16 @@ enum LearningRecordKind {
   NOTE
 }
 
+model TeacherSettings {
+  id                    String   @id @default("primary")
+  displayName           String   @default("Маша")
+  timezone              String   @default("Europe/Moscow")
+  defaultLessonDuration Int      @default(60)
+  currency              String   @default("RUB")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
 model Student {
   id                 String             @id @default(cuid())
   name               String

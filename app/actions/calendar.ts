@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { dateOnly, timeToMinute, todayDate } from "@/lib/domain/dates";
 import { sourceOccurrenceDate } from "@/lib/domain/schedule";
 import { rescheduleOccurrence } from "@/lib/services/schedule-service";
+import { getTeacherSettings } from "@/lib/settings";
 
 const required = (formData: FormData, key: string) => {
   const value = String(formData.get(key) ?? "").trim();
@@ -38,10 +39,11 @@ export async function rescheduleCalendarLesson(lessonId: string, formData: FormD
 }
 
 export async function cancelCalendarLesson(lessonId: string) {
+  const settings = await getTeacherSettings();
   await prisma.$transaction(async (tx) => {
     const lesson = await tx.lesson.findUniqueOrThrow({ where: { id: lessonId } });
     if (lesson.status !== "PLANNED") throw new Error("Отменить можно только запланированное занятие");
-    if (lesson.scheduledDate.toISOString().slice(0,10) < todayDate("Europe/Moscow")) throw new Error("Прошедшие занятия нельзя отменять через календарь");
+    if (lesson.scheduledDate.toISOString().slice(0,10) < todayDate(settings.timezone)) throw new Error("Прошедшие занятия нельзя отменять через календарь");
     await tx.lesson.update({ where: { id: lessonId }, data: { status: "CANCELLED", manuallyEdited: true } });
     await tx.attendance.updateMany({ where: { lessonId, manuallyEdited: false }, data: { status: "CANCELLED" } });
     if (lesson.recurringScheduleId) {
