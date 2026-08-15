@@ -446,3 +446,27 @@ input,select,textarea{font-family:var(--font-ui);accent-color:var(--color-primar
 @media(min-width:431px){.student-list-status{grid-column:3;grid-row:1;align-self:end}.student-list-open{grid-column:3;grid-row:2;align-self:start}}
 @media(max-width:900px){.page-stack{gap:20px}.page-heading{min-height:0}.summary-card,.panel,.form-section{box-shadow:none}.calendar-toolbar{align-items:stretch}}
 @media(max-width:560px){h1{font-size:2.1rem}.heading-actions .button,.heading-actions .secondary-button{min-height:42px}.profile-overview-grid .panel{min-height:0}}
+
+/* Controlled decorative system and final responsive QA */
+.dashboard-page{position:relative;min-width:0}
+.dashboard-floral-decoration{position:absolute;z-index:0;right:-36px;top:-82px;width:142px;height:214px;object-fit:contain;opacity:.58;pointer-events:none}
+.dashboard-page>.page-stack{position:relative;z-index:1}
+.dashboard-page .page-heading{padding-right:120px}
+.dashboard-attention{position:relative;min-height:310px;overflow:hidden}
+.dashboard-attention .panel-heading,.dashboard-attention .attention-list{position:relative;z-index:1}
+.dashboard-attention .attention-list{padding-bottom:88px}
+.dashboard-books-decoration{position:absolute;right:12px;bottom:-6px;width:158px;height:108px;object-fit:contain;opacity:.72;pointer-events:none}
+.profile-hero{position:relative;overflow:hidden;padding-right:210px}
+.profile-hero>.profile-visual,.profile-hero>.profile-identity{position:relative;z-index:1}
+.profile-books-decoration{position:absolute;right:12px;bottom:-11px;width:182px;height:124px;object-fit:contain;opacity:.54;pointer-events:none}
+.empty-state{position:relative;overflow:hidden;padding-right:clamp(170px,22vw,245px)}
+.empty-state>*{position:relative;z-index:1}
+.empty-state::after{content:"";position:absolute;right:18px;bottom:4px;width:152px;height:106px;background:url("/images/decor-stationery.png") center/contain no-repeat;opacity:.48;pointer-events:none}
+.empty-state h1,.empty-state h2,.empty-state p{overflow-wrap:anywhere}
+.panel-heading>div,.profile-identity,.learning-overview-title,.history-row>div,.finance-row>div{min-width:0}
+.panel-heading h2,.learning-card h2,.history-row strong,.finance-row strong{overflow-wrap:anywhere}
+@media(max-width:1180px){.dashboard-books-decoration{width:138px}.dashboard-attention .attention-list{padding-bottom:78px}.profile-hero{padding-right:185px}.profile-books-decoration{width:158px}}
+@media(max-width:1024px){.dashboard-floral-decoration,.dashboard-books-decoration,.profile-books-decoration{display:none}.dashboard-page .page-heading,.profile-hero{padding-right:28px}.dashboard-attention{min-height:0}.dashboard-attention .attention-list{padding-bottom:0}}
+@media(max-width:760px){.empty-state{padding-right:clamp(24px,5vw,54px)}.empty-state::after{display:none}.dashboard-page .page-heading,.profile-hero{padding-right:19px}.dashboard-attention{overflow:visible}}
+@media(max-width:430px){main{padding-inline:14px}.page-heading{gap:14px}.panel-heading{align-items:flex-start}.profile-hero{padding:17px}.profile-actions{width:100%}.profile-actions .button,.profile-actions .secondary-button{flex:1 1 140px}.student-list-copy strong,.student-list-copy small{max-width:100%}}
+@media(max-width:390px){.students-search{grid-template-columns:1fr}.students-search button{width:100%}.students-create-actions{grid-template-columns:1fr}.students-create-actions .button{grid-column:auto}.students-filters a{padding-inline:9px}.report-preview footer{grid-template-columns:1fr}.calendar-navigation strong{font-size:.78rem}}
