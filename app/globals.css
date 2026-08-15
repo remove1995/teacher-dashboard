@@ -469,3 +469,14 @@ input,select,textarea{font-family:var(--font-ui);accent-color:var(--color-primar
 .settings-feedback-success{background:color-mix(in srgb,var(--color-success) 8%,var(--color-surface));color:var(--color-success)}
 .settings-feedback-error{background:color-mix(in srgb,var(--color-danger) 8%,var(--color-surface));color:var(--color-danger)}
 @media(max-width:760px){.settings-section{grid-template-columns:1fr;gap:15px;padding:18px}.settings-fields{grid-template-columns:1fr}.settings-actions button{width:100%}}
+
+/* Real-data dashboard states */
+.dashboard-lesson-list{display:grid;margin:14px 0 0;padding:0;list-style:none}
+.dashboard-lesson-list li{display:grid;grid-template-columns:74px 8px minmax(0,1fr);gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--color-border)}
+.dashboard-lesson-list time{color:var(--color-text-secondary);font-size:.72rem;line-height:1.45}
+.dashboard-lesson-list i{width:8px;height:8px;border-radius:50%}
+.dashboard-lesson-list div{min-width:0;display:grid;gap:3px}
+.dashboard-lesson-list strong,.dashboard-lesson-list small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dashboard-lesson-list small,.dashboard-empty{color:var(--color-text-muted)}
+.dashboard-empty{display:grid;gap:8px;place-content:center;min-height:170px;text-align:center}
+.dashboard-empty p{margin:0}.dashboard-empty a{color:var(--color-primary);font-weight:650}

@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "node prisma/seed.mjs",
+    "db:reset-beta": "node scripts/reset-beta.mjs",
+    "db:seed-demo": "tsx prisma/seed-demo.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -33,6 +35,6 @@
     "vitest": "^3.2.4"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "node prisma/seed.mjs"
   }
 }

@@ -21,9 +21,8 @@ export function PagePlaceholder({ eyebrow, title, description, actions, children
       </section>
       {children ?? (
         <section className="empty-state">
-          <span className="empty-badge">Foundation</span>
-          <h2>Экран готов к подключению данных</h2>
-          <p>На этом этапе настроены маршрут, адаптивная оболочка и место для следующей продуктовой итерации.</p>
+          <h2>Здесь пока нет записей</h2>
+          <p>Данные появятся после добавления первой записи.</p>
         </section>
       )}
     </div>

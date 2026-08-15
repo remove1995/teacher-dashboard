@@ -50,7 +50,7 @@ export function PaymentsWorkspace({ rows, period, summary, openKey, editPaymentI
           </div>}
         </article>;
       })}
-      {!rows.length && <div className="finance-empty">По выбранным фильтрам ничего не найдено.</div>}
+      {!rows.length && <div className="finance-empty">Платежей пока нет. Добавьте ученика и настройте его оплату.</div>}
     </section>
     {selected && <PaymentSheet participant={selected} period={period} />}
     {editing && <CorrectionSheet participant={editing.item} payment={editing.payment} period={period} />}
