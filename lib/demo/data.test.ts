@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { demoLessonMonths, demoLessons, demoPayments, demoPaymentSummary, demoStudents } from "./data";
+import { demoLessonMonths, demoLessons, demoPayments, demoPaymentSummary, demoStudents, filterDemoPeople } from "./data";
 
 describe("read-only demo fixtures", () => {
   it("uses stable unique identifiers", () => {
@@ -17,5 +17,11 @@ describe("read-only demo fixtures", () => {
     const summary = demoPaymentSummary();
     expect(summary.expectedMinor).toBeGreaterThan(summary.receivedMinor);
     expect(summary.outstandingMinor).toBe(summary.expectedMinor - summary.receivedMinor);
+  });
+
+  it("combines student filters with case-insensitive search", () => {
+    expect(filterDemoPeople("PAIR", "адам").cohorts.map(({ id }) => id)).toEqual(["adam-daniel"]);
+    expect(filterDemoPeople("GROUP", "АДАМ").cohorts).toHaveLength(0);
+    expect(filterDemoPeople("INDIVIDUAL", "алина").students.map(({ id }) => id)).toEqual(["alina"]);
   });
 });
