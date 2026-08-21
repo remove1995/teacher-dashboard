@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:demo": "next build demo-static",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

@@ -1,0 +1,21 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "..",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "noEmit": true
+  },
+  "include": [
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "../app/demo/**/*.ts",
+    "../app/demo/**/*.tsx",
+    "../components/page-placeholder.tsx",
+    "../lib/demo/**/*.ts"
+  ],
+  "exclude": ["../node_modules"]
+}
