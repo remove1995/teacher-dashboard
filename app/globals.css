@@ -1177,11 +1177,18 @@ main .page-stack small{font-size:var(--font-size-secondary);line-height:1.45}
 .lesson-panel-footer>.lesson-delete-button:hover{background:color-mix(in srgb,var(--color-danger) 7%,transparent)}
 .remove-planning-month{border:1px solid transparent}.remove-planning-month:hover,.remove-planning-month:focus-visible{border-color:color-mix(in srgb,var(--color-danger) 18%,transparent);background:color-mix(in srgb,var(--color-danger) 7%,transparent);color:var(--color-danger)}
 
-.student-lifecycle-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.student-lifecycle-actions>form{display:flex}.student-lifecycle-actions button{white-space:nowrap}
-.student-danger-menu{position:relative;color:var(--color-text-muted);font-size:13px}.student-danger-menu>summary{padding:8px 4px;cursor:pointer;list-style:none}.student-danger-menu>summary::-webkit-details-marker{display:none}.student-danger-menu>summary:hover{color:var(--color-danger)}
-.student-danger-menu[open]{flex-basis:100%;padding:10px;border:1px solid color-mix(in srgb,var(--color-danger) 14%,var(--color-border));border-radius:12px;background:rgba(255,253,249,.54)}
-.student-danger-menu[open]>summary{padding-top:0}.student-danger-menu .danger-button{min-height:40px;padding:8px 12px}
-@media(max-width:520px){.lesson-panel-footer{grid-template-columns:1fr}.lesson-panel-footer>.lesson-delete-button{width:100%;order:2}.student-lifecycle-actions{width:100%}.student-lifecycle-actions>form,.student-lifecycle-actions>form>button{width:100%}}
+.student-lifecycle-menu{position:absolute!important;z-index:4!important;top:18px;right:18px}
+.student-lifecycle-trigger{display:grid;place-items:center;width:40px;height:40px;min-height:40px;padding:0;border:1px solid rgba(255,255,255,.72);border-radius:12px;background:rgba(255,253,249,.58);box-shadow:0 8px 20px rgba(91,70,47,.08),inset 1px 1px 0 rgba(255,255,255,.72);color:var(--color-text-secondary);font-size:18px;line-height:1;letter-spacing:1px;backdrop-filter:blur(14px)}
+.student-lifecycle-trigger:hover,.student-lifecycle-trigger[aria-expanded="true"]{background:rgba(255,253,249,.78);color:var(--color-text)}
+.student-lifecycle-popover{position:absolute;top:46px;right:0;width:210px;padding:6px;border:1px solid var(--glass-highlight);border-radius:14px;background:rgba(255,253,249,.92);box-shadow:0 16px 38px rgba(91,70,47,.16),inset 1px 1px 0 rgba(255,255,255,.78);backdrop-filter:blur(20px)}
+.student-lifecycle-popover button{width:100%;min-height:40px;padding:9px 11px;border:0;border-radius:9px;background:transparent;box-shadow:none;color:var(--color-text-secondary);font-size:14px;font-weight:500;text-align:left}
+.student-lifecycle-popover button:hover{background:rgba(236,226,212,.5);color:var(--color-text)}
+.student-lifecycle-popover .student-lifecycle-delete{color:var(--color-danger)}
+.student-lifecycle-separator{display:block;height:1px;margin:5px 7px;background:var(--color-border)}
+.student-lifecycle-backdrop{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;padding:20px;background:rgba(45,36,29,.2);backdrop-filter:blur(5px)}
+.student-lifecycle-dialog{width:min(440px,100%);padding:24px;border:1px solid var(--glass-highlight);border-radius:20px;background:rgba(255,253,249,.96);box-shadow:0 24px 60px rgba(63,43,32,.2)}
+.student-lifecycle-dialog h2{margin:0;font-size:24px}.student-lifecycle-dialog>p{margin:12px 0 0;color:var(--color-text-secondary)}.student-lifecycle-dialog footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}.student-lifecycle-dialog .danger-button{min-height:44px;padding:9px 14px}
+@media(max-width:520px){.lesson-panel-footer{grid-template-columns:1fr}.lesson-panel-footer>.lesson-delete-button{width:100%;order:2}.student-lifecycle-menu{top:12px;right:12px}.student-lifecycle-dialog footer{display:grid;grid-template-columns:1fr}.student-lifecycle-dialog footer button{width:100%}}
 
 /* Focused overview decoration */
 .dashboard-attention-decoration{right:-34px;bottom:-42px;width:152px;opacity:.5;filter:saturate(.88);transform:rotate(-3deg)}

@@ -3,7 +3,7 @@
 import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
-import { copyLessonPlan, emptyLessonPlan, reorderStages } from "@/lib/domain/lesson";
+import { copyLessonPlan, emptyLessonPlan, planningMonthRange, reorderStages } from "@/lib/domain/lesson";
 import { dateOnly, timeToMinute } from "@/lib/domain/dates";
 import { attendanceAfterLessonCompletion, attendanceAfterUndoCompletion } from "@/lib/domain/attendance";
 import { getTeacherSettings } from "@/lib/settings";
@@ -24,8 +24,8 @@ function refreshLessons() {
   revalidatePath("/payments");
 }
 
-const monthStart=(month:string)=>{if(!/^\d{4}-\d{2}$/.test(month))throw new Error("Invalid planning month");return dateOnly(`${month}-01`)};
-const nextMonth=(month:string)=>{const [year,value]=month.split("-").map(Number);return new Date(Date.UTC(year,value,1))};
+const monthStart=(month:string)=>dateOnly(planningMonthRange(month).start);
+const nextMonth=(month:string)=>dateOnly(planningMonthRange(month).end);
 
 export async function createLessonPlanningMonth(targetType:"student"|"cohort",targetId:string,month:string){
   const value=monthStart(month);

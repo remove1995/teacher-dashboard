@@ -8,6 +8,10 @@ describe("safe deletion contracts", () => {
   it("keeps archiving separate from the student learning status", () => {
     expect(source("prisma/schema.prisma")).toContain("archivedAt         DateTime?");
     expect(source("app/students/page.tsx")).toContain("where: { archivedAt: null }");
+    const controls = source("components/student-lifecycle-actions.tsx");
+    expect(controls).toContain("await archiveStudent(studentId)");
+    expect(controls).toContain("await deleteStudentForever(studentId)");
+    expect(controls).toContain('router.replace("/students")');
   });
 
   it("names the lesson in its destructive confirmation", () => {
@@ -20,6 +24,8 @@ describe("safe deletion contracts", () => {
     const board = source("components/lesson-kanban-board.tsx");
     expect(board).toContain("Вместе с ним будут удалены все планы уроков внутри месяца");
     expect(board).toContain("await deleteLessonMonth(targetType,targetId,column.key)");
+    expect(board).toContain("selectMonth(next,true)");
+    expect(source("app/lessons/page.tsx")).not.toContain("monthRecords.push");
   });
 
   it("detaches restricted lesson relations before deleting lessons", () => {
@@ -31,8 +37,10 @@ describe("safe deletion contracts", () => {
 
   it("requires distinct confirmations for archive and permanent deletion", () => {
     const controls = source("components/student-lifecycle-actions.tsx");
-    expect(controls).toContain("Архивировать ученика «${studentName}»?");
-    expect(controls).toContain("Удалить ученика «${studentName}» навсегда?");
+    expect(controls).toContain("`Архивировать ${studentName}?`");
+    expect(controls).toContain("`Удалить ${studentName} навсегда?`");
     expect(controls).toContain("Это действие нельзя отменить");
+    expect(controls).toContain('className="student-lifecycle-trigger"');
+    expect(controls).not.toContain("student-danger-menu");
   });
 });

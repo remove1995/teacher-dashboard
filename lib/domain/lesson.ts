@@ -99,6 +99,18 @@ export function groupLessonIdsByMonth(lessons: Array<{ id: string; scheduledDate
   }, {});
 }
 
+export function planningMonthRange(month: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) throw new Error("Invalid planning month");
+  const year = Number(match[1]);
+  const monthNumber = Number(match[2]);
+  if (monthNumber < 1 || monthNumber > 12) throw new Error("Invalid planning month");
+  return {
+    start: `${month}-01`,
+    end: new Date(Date.UTC(year, monthNumber, 1)).toISOString().slice(0, 10),
+  };
+}
+
 export type KanbanMonth = { key: string; materializedAt?: string | Date | null };
 
 export function orderLessonMonths(months: Array<string | KanbanMonth>, currentMonth: string, focusedMonth?: string) {

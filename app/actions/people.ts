@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { dateOnly, previousDate, todayDate } from "@/lib/domain/dates";
 import { normalizeTags, planMembershipChanges } from "@/lib/domain/people";
 import { prisma } from "@/lib/db/prisma";
+import { archiveStudentRecord, permanentlyDeleteStudentRecord } from "@/lib/services/student-lifecycle-service";
 
 const billingModels = new Set<BillingModel>(["MONTHLY_PREPAID", "WEEKLY_PREPAID", "PAY_PER_LESSON", "GROUP_SUBSCRIPTION"]);
 const studentStatuses = new Set<StudentStatus>(["ACTIVE", "PAUSED", "COMPLETED"]);
@@ -135,44 +136,15 @@ function refreshStudentWorkspaces(studentId: string) {
 }
 
 export async function archiveStudent(studentId: string) {
-  await prisma.student.update({ where: { id: studentId }, data: { archivedAt: new Date() } });
+  const result = await archiveStudentRecord(prisma, studentId);
   refreshStudentWorkspaces(studentId);
-  redirect("/students");
+  return result;
 }
 
 export async function deleteStudentForever(studentId: string) {
-  await prisma.$transaction(async (tx) => {
-    await tx.student.findUniqueOrThrow({ where: { id: studentId }, select: { id: true } });
-    const [lessons, payments] = await Promise.all([
-      tx.lesson.findMany({ where: { studentId }, select: { id: true } }),
-      tx.payment.findMany({ where: { studentId }, select: { id: true } }),
-    ]);
-    const lessonIds = lessons.map(({ id }) => id);
-    const paymentIds = payments.map(({ id }) => id);
-
-    if (paymentIds.length) {
-      await tx.credit.updateMany({ where: { destinationPaymentId: { in: paymentIds }, studentId: { not: studentId } }, data: { destinationPaymentId: null } });
-      await tx.payment.updateMany({ where: { correctsPaymentId: { in: paymentIds } }, data: { correctsPaymentId: null } });
-      await tx.attachment.deleteMany({ where: { paymentId: { in: paymentIds } } });
-    }
-    if (lessonIds.length) {
-      await tx.lesson.updateMany({ where: { originalLessonId: { in: lessonIds } }, data: { originalLessonId: null } });
-      await tx.credit.updateMany({ where: { sourceLessonId: { in: lessonIds }, studentId: { not: studentId } }, data: { sourceLessonId: null } });
-    }
-
-    await tx.credit.deleteMany({ where: { studentId } });
-    await tx.attendance.deleteMany({ where: { OR: [{ studentId }, ...(lessonIds.length ? [{ lessonId: { in: lessonIds } }] : [])] } });
-    await tx.learningRecord.deleteMany({ where: { studentId } });
-    await tx.testResult.deleteMany({ where: { studentId } });
-    await tx.payment.deleteMany({ where: { studentId } });
-    await tx.lesson.deleteMany({ where: { studentId } });
-    await tx.recurringSchedule.deleteMany({ where: { studentId } });
-    await tx.billingProfile.deleteMany({ where: { studentId } });
-    await tx.cohortMembership.deleteMany({ where: { studentId } });
-    await tx.student.delete({ where: { id: studentId } });
-  });
+  const result = await permanentlyDeleteStudentRecord(prisma, studentId);
   refreshStudentWorkspaces(studentId);
-  redirect("/students");
+  return result;
 }
 
 function cohortInput(formData: FormData) {
