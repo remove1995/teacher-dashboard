@@ -58,7 +58,7 @@ function aggregateStatus(statuses: DerivedPaymentStatus[]): DerivedPaymentStatus
 export async function getFinanceWorkspace(period: FinancePeriod) {
   const [students, cohorts, lessons, credits, payments] = await Promise.all([
     prisma.student.findMany({
-      where: { status: { not: "COMPLETED" } }, orderBy: { name: "asc" },
+      where: { archivedAt: null, status: { not: "COMPLETED" } }, orderBy: { name: "asc" },
       include: { billingProfiles: { orderBy: { effectiveFrom: "desc" } }, memberships: true },
     }),
     prisma.cohort.findMany({

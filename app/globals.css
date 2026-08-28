@@ -1171,6 +1171,18 @@ main .page-stack small{font-size:var(--font-size-secondary);line-height:1.45}
 @media(max-height:820px) and (min-width:901px){.sidebar-decoration{right:22px;bottom:22px;width:76px;opacity:.7}.sidebar:has(.sidebar-account) .sidebar-decoration{bottom:116px}}
 @media(max-height:700px) and (min-width:901px){.sidebar-decoration{display:none}}
 
+/* Confirmed destructive actions */
+.lesson-panel-footer{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px}
+.lesson-panel-footer>form{justify-self:stretch}.lesson-panel-footer>.lesson-delete-button{width:auto;min-width:96px;border:1px solid color-mix(in srgb,var(--color-danger) 20%,transparent);background:transparent;color:var(--color-danger);box-shadow:none}
+.lesson-panel-footer>.lesson-delete-button:hover{background:color-mix(in srgb,var(--color-danger) 7%,transparent)}
+.remove-planning-month{border:1px solid transparent}.remove-planning-month:hover,.remove-planning-month:focus-visible{border-color:color-mix(in srgb,var(--color-danger) 18%,transparent);background:color-mix(in srgb,var(--color-danger) 7%,transparent);color:var(--color-danger)}
+
+.student-lifecycle-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.student-lifecycle-actions>form{display:flex}.student-lifecycle-actions button{white-space:nowrap}
+.student-danger-menu{position:relative;color:var(--color-text-muted);font-size:13px}.student-danger-menu>summary{padding:8px 4px;cursor:pointer;list-style:none}.student-danger-menu>summary::-webkit-details-marker{display:none}.student-danger-menu>summary:hover{color:var(--color-danger)}
+.student-danger-menu[open]{flex-basis:100%;padding:10px;border:1px solid color-mix(in srgb,var(--color-danger) 14%,var(--color-border));border-radius:12px;background:rgba(255,253,249,.54)}
+.student-danger-menu[open]>summary{padding-top:0}.student-danger-menu .danger-button{min-height:40px;padding:8px 12px}
+@media(max-width:520px){.lesson-panel-footer{grid-template-columns:1fr}.lesson-panel-footer>.lesson-delete-button{width:100%;order:2}.student-lifecycle-actions{width:100%}.student-lifecycle-actions>form,.student-lifecycle-actions>form>button{width:100%}}
+
 /* Focused overview decoration */
 .dashboard-attention-decoration{right:-34px;bottom:-42px;width:152px;opacity:.5;filter:saturate(.88);transform:rotate(-3deg)}
 .dashboard-attention-panel:has(.dashboard-empty) .dashboard-attention-decoration{opacity:.56}

@@ -22,7 +22,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
   const normalizedQuery = query.toLocaleLowerCase("ru");
 
   const [students, cohorts] = await Promise.all([
-    prisma.student.findMany({ orderBy: { name: "asc" }, include: { tags: { include: { tag: true } }, memberships: { where: { OR: [{ activeTo: null }, { activeTo: { gte: new Date() } }] }, include: { cohort: true } }, billingProfiles: { where: { cohortId: null }, orderBy: { effectiveFrom: "desc" }, take: 1 }, individualSchedules: { where: { status: "ACTIVE" }, take: 1 } } }),
+    prisma.student.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, include: { tags: { include: { tag: true } }, memberships: { where: { OR: [{ activeTo: null }, { activeTo: { gte: new Date() } }] }, include: { cohort: true } }, billingProfiles: { where: { cohortId: null }, orderBy: { effectiveFrom: "desc" }, take: 1 }, individualSchedules: { where: { status: "ACTIVE" }, take: 1 } } }),
     prisma.cohort.findMany({ orderBy: [{ kind: "asc" }, { name: "asc" }], include: { tags: { include: { tag: true } }, memberships: { where: { OR: [{ activeTo: null }, { activeTo: { gte: new Date() } }] }, include: { student: true } }, schedules: { where: { status: "ACTIVE" }, take: 1 } } }),
   ]);
 

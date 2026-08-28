@@ -30,6 +30,8 @@ UI code must not embed financial, recurrence, attendance, or credit calculations
 
 Pairs and groups are represented as `Cohort` records with a `PAIR` or `GROUP` kind. `CohortMembership` records contain effective dates and participant-level commercial overrides. Teaching formats are derived from active memberships and lessons, never from a permanent student type.
 
+`Student.archivedAt` is the soft-delete boundary for beta operations. Archived students are excluded from active lists and selectors while their lessons, attendance, memberships, billing history, payments, credits, and learning records remain intact. Permanent deletion is a separate confirmed action that explicitly removes the student-owned dependency graph in a transaction; shared cohorts and unrelated student data are retained.
+
 ### Billing profiles
 
 Billing belongs to an individual student within a context. `BillingProfile` therefore links a student to either:
@@ -53,7 +55,9 @@ Generated lessons retain their source schedule and generation fingerprint. A gen
 
 The Lessons Kanban is a planning projection of these same lesson records, not a second lesson system. `kanbanVisible` records an explicit or meaningful planning card, `kanbanMaterializedAt` establishes planning-month workflow order, and `kanbanOrder` persists teacher-defined vertical ordering. Untouched generated occurrences remain hidden from Kanban but visible to Calendar and available for materialization. Materializing a generated occurrence updates that record instead of creating a duplicate. Materialized lessons and manual date overrides are preserved by recurring-schedule revisions.
 
-`LessonPlanningMonth` persists an explicitly created Kanban month independently of lessons. This permits a teacher to keep an empty planning column without manufacturing a lesson record. It targets exactly one student or cohort, is unique per target/month, and can be removed only while it has no visible Kanban lessons.
+`LessonPlanningMonth` persists an explicitly created Kanban month independently of lessons. This permits a teacher to keep an empty planning column without manufacturing a lesson record. It targets exactly one student or cohort and is unique per target/month. Confirmed month deletion removes that marker and visible Kanban lesson records belonging to the same target and calendar month; untouched hidden recurring occurrences are not treated as lesson plans.
+
+Confirmed lesson deletion removes the `Lesson` record rather than only clearing its planning fields. Attendance owned by the lesson is removed, reschedule and credit references are safely detached, and existing relation policies handle stages, tags, attachments, and optional learning/test references. Clearing editable plan content remains a separate non-destructive action.
 
 Active/current/future Kanban months precede ended months; ended months form the archive on the right. Within a month, cards without a manual order are sorted nearest-upcoming first, with past/completed work below. Moving a card across months updates only its planned date and Kanban position, retaining its content, completion, attendance, and financial relationships.
 

@@ -1,5 +1,6 @@
 "use server";
 
+import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { copyLessonPlan, emptyLessonPlan, reorderStages } from "@/lib/domain/lesson";
@@ -16,8 +17,11 @@ const required = (formData: FormData, key: string) => {
 };
 
 function refreshLessons() {
+  revalidatePath("/");
   revalidatePath("/lessons");
   revalidatePath("/attendance");
+  revalidatePath("/calendar");
+  revalidatePath("/payments");
 }
 
 const monthStart=(month:string)=>{if(!/^\d{4}-\d{2}$/.test(month))throw new Error("Invalid planning month");return dateOnly(`${month}-01`)};
@@ -36,6 +40,38 @@ export async function removeLessonPlanningMonth(planningMonthId:string){
   const lessons=await prisma.lesson.count({where:{...targetWhere,kanbanVisible:true,scheduledDate:{gte:monthStart(month),lt:nextMonth(month)}}});
   if(lessons>0)throw new Error("Move the lessons before removing this month");
   await prisma.lessonPlanningMonth.delete({where:{id:planningMonthId}});refreshLessons();return {month};
+}
+
+async function deleteLessonRecords(tx: Prisma.TransactionClient, lessonIds: string[]) {
+  if (!lessonIds.length) return;
+  await tx.lesson.updateMany({ where: { originalLessonId: { in: lessonIds } }, data: { originalLessonId: null } });
+  await tx.credit.updateMany({ where: { sourceLessonId: { in: lessonIds } }, data: { sourceLessonId: null } });
+  await tx.attendance.deleteMany({ where: { lessonId: { in: lessonIds } } });
+  await tx.lesson.deleteMany({ where: { id: { in: lessonIds } } });
+}
+
+export async function deleteLesson(lessonId: string) {
+  const lesson = await prisma.lesson.findUniqueOrThrow({ where: { id: lessonId }, select: { id: true, title: true } });
+  await prisma.$transaction((tx) => deleteLessonRecords(tx, [lesson.id]));
+  refreshLessons();
+  return { id: lesson.id, title: lesson.title };
+}
+
+export async function deleteLessonMonth(targetType: "student" | "cohort", targetId: string, month: string) {
+  const start = monthStart(month);
+  const end = nextMonth(month);
+  const targetWhere = targetType === "student" ? { studentId: targetId } : { cohortId: targetId };
+  const deleted = await prisma.$transaction(async (tx) => {
+    const lessons = await tx.lesson.findMany({
+      where: { ...targetWhere, kanbanVisible: true, scheduledDate: { gte: start, lt: end } },
+      select: { id: true },
+    });
+    await deleteLessonRecords(tx, lessons.map(({ id }) => id));
+    await tx.lessonPlanningMonth.deleteMany({ where: { ...targetWhere, month: start } });
+    return lessons.length;
+  });
+  refreshLessons();
+  return { month, deleted };
 }
 
 export async function moveLessonOnMobile(lessonId:string,scheduledDateText:string){

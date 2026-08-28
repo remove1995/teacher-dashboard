@@ -89,6 +89,7 @@ model Student {
   status             StudentStatus      @default(ACTIVE)
   yearOrLevel        String?
   notesPrivate       String?
+  archivedAt         DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   memberships        CohortMembership[]
@@ -102,6 +103,8 @@ model Student {
   testResults        TestResult[]
   tags               StudentTag[]
   lessonPlanningMonths LessonPlanningMonth[] @relation("StudentPlanningMonth")
+
+  @@index([archivedAt])
 }
 
 model Cohort {
