@@ -2,9 +2,24 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addLessonStage, addLessonTag, materializeLesson, moveLessonOnMobile, deleteLessonStage, removeLessonTag, reorderLessonStages, toggleLessonStage, updateLessonDate, updateLessonField, updateLessonStage } from "@/app/actions/lessons";
+import { addLessonStage, addLessonTag, clearLessonPlan, materializeLesson, moveLessonOnMobile, deleteLessonStage, removeLessonTag, reorderLessonStages, toggleLessonStage, updateLessonDate, updateLessonField, updateLessonStage } from "@/app/actions/lessons";
 import { suggestDateInMonth } from "@/lib/domain/lesson";
 import { ShareActions } from "@/components/share-actions";
+
+export function ClearLessonPlanButton({ lessonId }: { lessonId: string }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const clear = () => {
+    if (!window.confirm("Очистить план урока? Дата, статус и история урока сохранятся.")) return;
+    startTransition(async () => {
+      await clearLessonPlan(lessonId);
+      router.refresh();
+    });
+  };
+  return <button className="lesson-plan-clear" type="button" aria-label="Очистить план урока" title="Очистить план урока" disabled={pending} onClick={clear}>
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg>
+  </button>;
+}
 
 export function EntitySwitcher({ entities, selected }: { entities: Array<{ value: string; label: string; kind: string }>; selected: string }) {
   const router = useRouter();
@@ -54,7 +69,7 @@ export function TagEditor({ lessonId, tags, suggestions }: { lessonId: string; t
 
 export function LessonColorPicker({ lessonId, value, entityColor }: { lessonId: string; value: string | null; entityColor: string }) {
   const router=useRouter(); const [pending,startTransition]=useTransition();
-  return <label className="lesson-color-control"><span>Цвет карточки</span><input type="color" defaultValue={value ?? entityColor} disabled={pending} onChange={(event)=>{const data=new FormData();data.set("value",event.target.value);startTransition(async()=>{await updateLessonField(lessonId,"colorOverride",data);router.refresh();});}} /></label>;
+  return <label className="lesson-color-control"><span>Акцентный цвет</span><input type="color" defaultValue={value ?? entityColor} disabled={pending} onChange={(event)=>{const data=new FormData();data.set("value",event.target.value);startTransition(async()=>{await updateLessonField(lessonId,"colorOverride",data);router.refresh();});}} /></label>;
 }
 
 export function LessonDateField({ lessonId, value }: { lessonId: string; value: string }) {

@@ -55,6 +55,15 @@ export function copyLessonPlan(source: ReusableLessonPlan) {
   };
 }
 
+export function emptyLessonPlan() {
+  return {
+    title: "",
+    goal: null,
+    homeworkText: null,
+    notes: null,
+  };
+}
+
 export function lessonMatchesSearch(lesson: ReusableLessonPlan & { notes?: string | null }, query: string) {
   const normalized = query.trim().toLocaleLowerCase("ru");
   if (!normalized) return true;

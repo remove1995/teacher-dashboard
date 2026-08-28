@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
-import { copyLessonPlan, reorderStages } from "@/lib/domain/lesson";
+import { copyLessonPlan, emptyLessonPlan, reorderStages } from "@/lib/domain/lesson";
 import { dateOnly, timeToMinute } from "@/lib/domain/dates";
 import { attendanceAfterLessonCompletion, attendanceAfterUndoCompletion } from "@/lib/domain/attendance";
 import { getTeacherSettings } from "@/lib/settings";
@@ -57,6 +57,18 @@ export async function updateLessonDate(lessonId: string, formData: FormData) {
   await prisma.lesson.update({ where: { id: lessonId }, data: { scheduledDate: dateOnly(scheduledDate), ...planned(), kanbanMaterializedAt: new Date() } });
   refreshLessons();
   return scheduledDate;
+}
+
+export async function clearLessonPlan(lessonId: string) {
+  await prisma.$transaction([
+    prisma.lessonStage.deleteMany({ where: { lessonId } }),
+    prisma.lessonTag.deleteMany({ where: { lessonId } }),
+    prisma.lesson.update({
+      where: { id: lessonId },
+      data: { ...emptyLessonPlan(), ...planned() },
+    }),
+  ]);
+  refreshLessons();
 }
 
 export async function materializeLesson(targetType: "student" | "cohort", targetId: string, candidateId: string | null, formData: FormData) {

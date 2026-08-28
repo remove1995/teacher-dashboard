@@ -55,7 +55,7 @@ export default async function LearningProfilePage({ params, searchParams }: { pa
   const activeType = validTypes.includes(query.type as LearningEntryType) ? query.type as LearningEntryType : "ALL";
 
   return <div className="learning-profile-page">
-    <header className="page-heading learning-heading"><div><p className="eyebrow">Профиль ученика</p><h1>Обучение · {student.name}</h1><p>Материал, наблюдения и результаты в одной хронологии.</p></div><Link className="secondary-button" href={`/students/${student.id}`}>К профилю</Link></header>
+    <header className="page-heading learning-heading"><div><p className="eyebrow">Профиль ученика</p><h1>Обучение · {student.name}</h1></div><Link className="secondary-button" href={`/students/${student.id}`}>К профилю</Link></header>
     <LearningProfileWorkspace
       studentId={student.id}
       studentName={student.name}

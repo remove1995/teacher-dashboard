@@ -39,11 +39,11 @@ export function PaymentsWorkspace({ rows, period, summary, openKey, editPaymentI
           </button>}
           {isExpanded && <div className="finance-participants">
             {row.participants.map((item) => <div className="finance-row" key={item.key}>
-              <div className="finance-person"><span className="finance-dot" /><div><strong>{item.name}</strong><small>{item.contextName}</small></div></div>
+              <div className="finance-person"><span className="finance-dot" /><div className="entity-meta"><strong className="entity-primary">{item.name}</strong><small className="entity-secondary">{item.contextName}</small></div></div>
               <div><strong>{modelLabels[item.billingModel]}</strong><small>{rubles(item.unitAmountMinor)}{item.kind === "GROUP" ? " · цена участника" : ""}</small></div>
-              <div><strong>{rubles(item.expectedMinor)}</strong><small>{item.calculationNote}</small></div>
-              <div><strong>{rubles(item.receivedMinor)}</strong><small>{item.lastPaymentDate ? `Последний: ${item.lastPaymentDate}` : "Платежей нет"}</small></div>
-              <div><strong className={item.balanceMinor > 0 ? "positive" : item.balanceMinor < 0 ? "negative" : ""}>{item.balanceMinor > 0 ? "+" : ""}{rubles(item.balanceMinor)}</strong>{item.receiptUrl && <a href={item.receiptUrl} target="_blank" rel="noreferrer">Чек ↗</a>}</div>
+              <div className="finance-value-cell"><strong>{rubles(item.expectedMinor)}</strong><small>{item.calculationNote}</small></div>
+              <div className="finance-value-cell"><strong>{rubles(item.receivedMinor)}</strong><small>{item.lastPaymentDate ? `Последний: ${item.lastPaymentDate}` : "Платежей нет"}</small></div>
+              <div className="finance-value-cell"><strong className={item.balanceMinor > 0 ? "positive" : item.balanceMinor < 0 ? "negative" : ""}>{item.balanceMinor > 0 ? "+" : ""}{rubles(item.balanceMinor)}</strong>{item.receiptUrl && <a href={item.receiptUrl} target="_blank" rel="noreferrer">Чек ↗</a>}</div>
               <div><span className={`payment-status status-${item.status.toLowerCase()}`}>{statusLabels[item.status]}</span>{item.creditMinor > 0 && <small>Кредит {rubles(item.creditMinor)}</small>}</div>
               <div className="finance-actions"><a className="small-button" href={`?month=${period.key}&add=${encodeURIComponent(item.key)}`}>+ Оплата</a>{item.payments.filter((payment) => !currentPayments.has(payment.id)).map((payment) => <a key={payment.id} className="payment-history-link" href={`?month=${period.key}&editPayment=${payment.id}`} title="Исправить платёж">{payment.date ?? "—"} · {rubles(payment.amountMinor)}</a>)}</div>
             </div>)}
