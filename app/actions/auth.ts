@@ -2,7 +2,7 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { authenticateAndCreateSession, passwordHashFromEnvironment } from "@/lib/auth/password";
+import { authenticateAndCreateSession, effectivePasswordHash } from "@/lib/auth/password";
 import { clearSessionCookie, setSessionCookie } from "@/lib/auth/session";
 
 export type LoginState = { error: string | null };
@@ -17,7 +17,7 @@ export async function login(_: LoginState, formData: FormData): Promise<LoginSta
   await wait(650 + Math.min(recentCount, 5) * 350);
 
   const password = String(formData.get("password") ?? "");
-  const passwordHash = passwordHashFromEnvironment(process.env.TUTORFLOW_PASSWORD_HASH_B64, process.env.TUTORFLOW_PASSWORD_HASH);
+  const passwordHash = effectivePasswordHash();
   const sessionSecret = process.env.TUTORFLOW_SESSION_SECRET;
 
   const token = await authenticateAndCreateSession(password, passwordHash, sessionSecret);
