@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { verifyPassword } from "../lib/auth/password-runtime.mjs";
+import { passwordHashFromEnvironment, verifyPassword } from "../lib/auth/password-runtime.mjs";
 
 function loadEnvFile(path) {
   if (!existsSync(path)) return;
@@ -16,7 +16,7 @@ function loadEnvFile(path) {
 loadEnvFile(resolve(process.cwd(), ".env.local"));
 loadEnvFile(resolve(process.cwd(), ".env"));
 
-const hash = process.env.TUTORFLOW_PASSWORD_HASH;
+const hash = passwordHashFromEnvironment(process.env.TUTORFLOW_PASSWORD_HASH_B64, process.env.TUTORFLOW_PASSWORD_HASH);
 if (!hash) {
   console.log("HASH NOT SET");
   process.exit(0);
