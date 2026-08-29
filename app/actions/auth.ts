@@ -20,6 +20,10 @@ export async function login(_: LoginState, formData: FormData): Promise<LoginSta
   const passwordHash = process.env.TUTORFLOW_PASSWORD_HASH;
   const sessionSecret = process.env.TUTORFLOW_SESSION_SECRET;
   const hashParts = passwordHash?.split("$") ?? [];
+  const numericPart = (index: number) => {
+    const value = Number(hashParts[index]);
+    return hashParts[index] && Number.isInteger(value) ? value : "invalid";
+  };
   const hashFormatValid = hashParts.length === 6
     && hashParts[0] === "scrypt"
     && Number.isInteger(Number(hashParts[1]))
@@ -37,6 +41,16 @@ export async function login(_: LoginState, formData: FormData): Promise<LoginSta
   console.info(`sessionSecretPresent: ${Boolean(sessionSecret)}`);
   console.info(`hashFormatValid: ${hashFormatValid}`);
   console.info(`passwordVerified: ${passwordVerified}`);
+  console.info(`hashLength: ${passwordHash?.length ?? 0}`);
+  console.info(`hashPartCount: ${hashParts.length}`);
+  console.info(`algorithmIsScrypt: ${hashParts[0] === "scrypt"}`);
+  console.info(`nValue: ${numericPart(1)}`);
+  console.info(`rValue: ${numericPart(2)}`);
+  console.info(`pValue: ${numericPart(3)}`);
+  console.info(`saltLength: ${hashParts[4]?.length ?? 0}`);
+  console.info(`digestLength: ${hashParts[5]?.length ?? 0}`);
+  console.info(`firstCharCode: ${passwordHash?.length ? passwordHash.charCodeAt(0) : -1}`);
+  console.info(`lastCharCode: ${passwordHash?.length ? passwordHash.charCodeAt(passwordHash.length - 1) : -1}`);
 
   const token = await authenticateAndCreateSession(password, passwordHash, sessionSecret);
   if (!token) {
