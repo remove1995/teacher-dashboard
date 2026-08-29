@@ -37,15 +37,17 @@ function readHidden(prompt) {
       process.stdout.write("\n");
       resolvePassword(password);
     };
-    const onData = (character) => {
-      if (character === "\r" || character === "\n") return finish();
-      if (character === "\u0003") {
-        process.stdin.setRawMode(false);
-        process.stdout.write("\n");
-        process.exit(130);
+    const onData = (input) => {
+      for (const character of input) {
+        if (character === "\r" || character === "\n") return finish();
+        if (character === "\u0003") {
+          process.stdin.setRawMode(false);
+          process.stdout.write("\n");
+          process.exit(130);
+        }
+        if (character === "\u007f" || character === "\b") password = password.slice(0, -1);
+        else password += character;
       }
-      if (character === "\u007f" || character === "\b") password = password.slice(0, -1);
-      else password += character;
     };
     process.stdin.on("data", onData);
   });
