@@ -1,14 +1,13 @@
 import { saveTeacherSettings } from "@/app/settings/actions";
 import { getTeacherSettings } from "@/lib/settings";
-import { AvatarFileField } from "@/components/avatar-file-field";
+import { TeacherAvatarUrlField } from "@/components/teacher-avatar-url-field";
 
 type Search = { saved?: string; error?: string };
 const errors: Record<string, string> = {
   name: "Укажите имя длиной до 80 символов.",
   timezone: "Укажите корректный часовой пояс.",
   duration: "Длительность должна быть от 15 до 240 минут.",
-  "avatar-size": "Изображение должно быть не больше 5 МБ.",
-  "avatar-type": "Выберите изображение JPG, PNG или WebP.",
+  "avatar-url": "Укажите корректную прямую ссылку на изображение.",
 };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<Search> }) {
@@ -20,12 +19,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     <form action={saveTeacherSettings} className="settings-form">
       <section className="settings-section">
         <div><h2>Профиль преподавателя</h2></div>
-        <div className="settings-profile-fields">
-          <div className="settings-avatar-preview">{settings.avatarUrl ? <img src={settings.avatarUrl} alt="Текущий аватар" /> : <span>{settings.displayName.slice(0, 1).toUpperCase()}</span>}</div>
-          <div className="settings-avatar-controls">
-            <label className="field"><span>Отображаемое имя</span><input name="displayName" required maxLength={80} defaultValue={settings.displayName} /></label>
-            <AvatarFileField />
-          </div>
+        <div className="settings-avatar-controls">
+          <label className="field"><span>Отображаемое имя</span><input name="displayName" required maxLength={80} defaultValue={settings.displayName} /></label>
+          <TeacherAvatarUrlField initialUrl={settings.avatarUrl} fallback={settings.displayName.slice(0, 1).toUpperCase()} />
         </div>
       </section>
       <section className="settings-section">

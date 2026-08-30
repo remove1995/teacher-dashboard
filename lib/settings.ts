@@ -24,3 +24,13 @@ export function validTimezone(value: string) {
     return false;
   }
 }
+
+export function validAvatarUrl(value: string | null | undefined) {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}

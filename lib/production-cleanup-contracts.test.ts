@@ -20,8 +20,9 @@ describe("production-use cleanup contracts", () => {
 
   it("passes the persisted teacher avatar into the account panel", () => {
     expect(source("app/layout.tsx")).toContain("teacherAvatarUrl={settings.avatarUrl}");
-    expect(source("components/app-shell.tsx")).toContain("teacherAvatarUrl ? <img");
-    expect(source("app/settings/actions.ts")).toContain("storeTeacherAvatar");
+    expect(source("components/app-shell.tsx")).toContain("<AvatarImage src={teacherAvatarUrl}");
+    expect(source("app/settings/actions.ts")).toContain("validAvatarUrl(avatarUrl)");
+    expect(source("app/settings/actions.ts")).not.toContain("storeTeacherAvatar");
   });
 
   it("shows native Send only when browser sharing is available", () => {
@@ -47,9 +48,10 @@ describe("production-use cleanup contracts", () => {
     expect(form).not.toContain('<span>Окончание</span>');
   });
 
-  it("uses the custom accessible avatar picker and cohesive cohort hero", () => {
-    expect(source("app/settings/page.tsx")).toContain("<AvatarFileField />");
-    expect(source("components/avatar-file-field.tsx")).toContain("Файл не выбран");
+  it("uses a URL-based teacher avatar preview and cohesive cohort hero", () => {
+    expect(source("app/settings/page.tsx")).toContain("<TeacherAvatarUrlField");
+    expect(source("components/teacher-avatar-url-field.tsx")).toContain('name="avatarUrl"');
+    expect(source("components/teacher-avatar-url-field.tsx")).toContain('type="url"');
     expect(source("app/cohorts/[cohortId]/page.tsx")).toContain("cohort-profile-visual");
     expect(source("app/cohorts/[cohortId]/page.tsx")).toContain('/assets/books-botanical-center.png');
     expect(source("components/cohort-form.tsx")).toContain('name="imageUrl"');
