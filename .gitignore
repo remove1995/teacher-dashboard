@@ -8,5 +8,6 @@ coverage
 public/uploads/learning/*
 !public/uploads/learning/.gitkeep
 .vscode/
+.env.auth-backup
 
 /assets/
