@@ -7,6 +7,8 @@ coverage
 *.log
 public/uploads/learning/*
 !public/uploads/learning/.gitkeep
+public/uploads/profile/*
+!public/uploads/profile/.gitkeep
 
 .vscode/
 

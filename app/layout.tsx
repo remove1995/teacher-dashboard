@@ -4,7 +4,7 @@ import { getTeacherSettings } from "@/lib/settings";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Teacher Dashboard",
+  title: "TutorFlow",
   description: "Planning, attendance, payments, and learning records for tutors.",
 };
 
@@ -13,7 +13,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="ru">
       <body>
-        <AppShell teacherName={settings.displayName}>{children}</AppShell>
+        <AppShell teacherName={settings.displayName} teacherAvatarUrl={settings.avatarUrl}>{children}</AppShell>
       </body>
     </html>
   );

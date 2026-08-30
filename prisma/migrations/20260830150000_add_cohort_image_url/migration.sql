@@ -1,0 +1,1 @@
+ALTER TABLE "Cohort" ADD COLUMN "imageUrl" TEXT;

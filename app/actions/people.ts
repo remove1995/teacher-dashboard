@@ -4,7 +4,7 @@ import type { BillingModel, CohortKind, Prisma, StudentStatus } from "@prisma/cl
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { dateOnly, previousDate, todayDate } from "@/lib/domain/dates";
-import { normalizeTags, planMembershipChanges } from "@/lib/domain/people";
+import { normalizeTags, planMembershipChanges, validateCohortParticipants } from "@/lib/domain/people";
 import { prisma } from "@/lib/db/prisma";
 import { archiveStudentRecord, permanentlyDeleteStudentRecord } from "@/lib/services/student-lifecycle-service";
 
@@ -151,37 +151,67 @@ function cohortInput(formData: FormData) {
   const kind = required(formData, "kind") as CohortKind;
   if (kind !== "PAIR" && kind !== "GROUP") throw new Error("Invalid cohort kind");
   const activeFrom = required(formData, "activeFrom");
-  const memberIds = formData.getAll("memberIds").map(String);
-  if (kind === "PAIR" && memberIds.length !== 2) throw new Error("A pair must contain exactly two active members");
-  if (kind === "GROUP" && memberIds.length < 2) throw new Error("A group must contain at least two active members");
-  return { kind, name: required(formData, "name"), color: required(formData, "color"), activeFrom, activeTo: optional(formData, "activeTo"), defaultRateMinor: moneyMinor(required(formData, "defaultRate")), tagNames: tags(formData), memberIds };
+  const keys = formData.getAll("participantKeys").map(String);
+  if (new Set(keys).size !== keys.length) throw new Error("Invalid duplicate participant rows");
+  const participants = keys.map((key) => {
+    const mode = required(formData, `participantMode:${key}`);
+    if (mode !== "existing" && mode !== "new") throw new Error("Invalid participant mode");
+    const model = required(formData, `billingModel:${key}`) as BillingModel;
+    if (!billingModels.has(model)) throw new Error("Invalid billing model");
+    return { key, mode: mode as "existing" | "new", studentId: optional(formData, `participantStudentId:${key}`), name: optional(formData, `participantName:${key}`), model, amountMinor: moneyMinor(required(formData, `rate:${key}`)), rateChangeFrom: optional(formData, `rateChangeFrom:${key}`) };
+  });
+  validateCohortParticipants(kind, participants);
+  return { kind, name: required(formData, "name"), imageUrl: optional(formData, "imageUrl"), color: required(formData, "color"), activeFrom, activeTo: optional(formData, "activeTo"), defaultRateMinor: moneyMinor(required(formData, "defaultRate")), tagNames: tags(formData), participants };
 }
 
-async function syncMembers(tx: Prisma.TransactionClient, cohortId: string, input: ReturnType<typeof cohortInput>, formData: FormData) {
+type ResolvedParticipant = ReturnType<typeof cohortInput>["participants"][number] & { studentId: string };
+
+async function resolveParticipants(tx: Prisma.TransactionClient, input: ReturnType<typeof cohortInput>) {
+  const existingIds = input.participants.filter(({ mode }) => mode === "existing").map(({ studentId }) => studentId!);
+  const existing = await tx.student.findMany({ where: { id: { in: existingIds }, archivedAt: null }, select: { id: true } });
+  if (existing.length !== existingIds.length) throw new Error("One or more selected students are unavailable");
+  const resolved: ResolvedParticipant[] = [];
+  for (const participant of input.participants) {
+    if (participant.mode === "existing") {
+      resolved.push({ ...participant, studentId: participant.studentId! });
+      continue;
+    }
+    const name = participant.name!.trim();
+    const duplicate = await tx.student.findFirst({ where: { name: { equals: name, mode: "insensitive" }, archivedAt: null }, select: { id: true } });
+    if (duplicate) throw new Error(`Student ${name} already exists; select the existing profile`);
+    const student = await tx.student.create({ data: { name, color: input.color, status: "ACTIVE" } });
+    resolved.push({ ...participant, studentId: student.id });
+  }
+  if (new Set(resolved.map(({ studentId }) => studentId)).size !== resolved.length) throw new Error("The same student cannot be added twice");
+  return resolved;
+}
+
+async function syncMembers(tx: Prisma.TransactionClient, cohortId: string, input: ReturnType<typeof cohortInput>, participants: ResolvedParticipant[]) {
   const existing = await tx.cohortMembership.findMany({ where: { cohortId, activeTo: null } });
-  const changes = planMembershipChanges(existing.map(({ studentId }) => studentId), input.memberIds);
+  const memberIds = participants.map(({ studentId }) => studentId);
+  const changes = planMembershipChanges(existing.map(({ studentId }) => studentId), memberIds);
   const closingDate = dateOnly(todayDate());
   const removedIds = changes.removed;
   if (removedIds.length) {
     await tx.cohortMembership.updateMany({ where: { cohortId, activeTo: null, studentId: { in: removedIds } }, data: { activeTo: closingDate } });
     await tx.billingProfile.updateMany({ where: { cohortId, studentId: { in: removedIds }, effectiveTo: null }, data: { effectiveTo: closingDate } });
   }
-  for (const studentId of input.memberIds) {
+  for (const participant of participants) {
+    const { studentId } = participant;
     if (changes.added.includes(studentId)) await tx.cohortMembership.create({ data: { cohortId, studentId, activeFrom: dateOnly(input.activeFrom) } });
-    const model = required(formData, `billingModel:${studentId}`) as BillingModel;
-    if (!billingModels.has(model)) throw new Error("Invalid billing model");
-    const effectiveFrom = changes.added.includes(studentId) ? input.activeFrom : optional(formData, `rateChangeFrom:${studentId}`) ?? todayDate();
-    await setBilling(tx, { studentId, cohortId, model, amountMinor: moneyMinor(required(formData, `rate:${studentId}`)), effectiveFrom });
+    const effectiveFrom = changes.added.includes(studentId) ? input.activeFrom : participant.rateChangeFrom ?? todayDate();
+    await setBilling(tx, { studentId, cohortId, model: participant.model, amountMinor: participant.amountMinor, effectiveFrom });
   }
-  return input.memberIds.length;
+  return memberIds.length;
 }
 
 export async function createCohort(formData: FormData) {
   const input = cohortInput(formData);
   const cohort = await prisma.$transaction(async (tx) => {
-    const created = await tx.cohort.create({ data: { kind: input.kind, name: input.name, color: input.color, activeFrom: dateOnly(input.activeFrom), activeTo: input.activeTo ? dateOnly(input.activeTo) : null, defaultRateMinor: input.defaultRateMinor } });
+    const created = await tx.cohort.create({ data: { kind: input.kind, name: input.name, imageUrl: input.imageUrl, color: input.color, activeFrom: dateOnly(input.activeFrom), activeTo: input.activeTo ? dateOnly(input.activeTo) : null, defaultRateMinor: input.defaultRateMinor } });
     await replaceTags(tx, { cohortId: created.id }, input.tagNames);
-    await syncMembers(tx, created.id, input, formData);
+    const participants = await resolveParticipants(tx, input);
+    await syncMembers(tx, created.id, input, participants);
     return created;
   });
   revalidatePath("/students");
@@ -191,9 +221,10 @@ export async function createCohort(formData: FormData) {
 export async function updateCohort(cohortId: string, formData: FormData) {
   const input = cohortInput(formData);
   await prisma.$transaction(async (tx) => {
-    await tx.cohort.update({ where: { id: cohortId }, data: { kind: input.kind, name: input.name, color: input.color, activeFrom: dateOnly(input.activeFrom), activeTo: input.activeTo ? dateOnly(input.activeTo) : null, defaultRateMinor: input.defaultRateMinor } });
+    await tx.cohort.update({ where: { id: cohortId }, data: { kind: input.kind, name: input.name, imageUrl: input.imageUrl, color: input.color, activeFrom: dateOnly(input.activeFrom), activeTo: input.activeTo ? dateOnly(input.activeTo) : null, defaultRateMinor: input.defaultRateMinor } });
     await replaceTags(tx, { cohortId }, input.tagNames);
-    await syncMembers(tx, cohortId, input, formData);
+    const participants = await resolveParticipants(tx, input);
+    await syncMembers(tx, cohortId, input, participants);
   });
   revalidatePath("/students");
   revalidatePath(`/cohorts/${cohortId}`);

@@ -5,6 +5,7 @@ export const SETTINGS_ID = "primary";
 export const DEFAULT_TEACHER_SETTINGS = {
   id: SETTINGS_ID,
   displayName: "Маша",
+  avatarUrl: null,
   timezone: "Europe/Moscow",
   defaultLessonDuration: 60,
   currency: "RUB",

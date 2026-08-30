@@ -77,7 +77,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
           </Link>;
         })}
         {visibleCohorts.map((cohort) => <Link className="student-list-card" href={`/cohorts/${cohort.id}`} key={cohort.id} style={{ "--entity-color": cohort.color } as React.CSSProperties}>
-          <span className="student-list-avatar">{cohort.kind === "PAIR" ? "2" : cohort.memberships.length}</span>
+          <span className="student-list-avatar">{cohort.imageUrl ? <img src={cohort.imageUrl} alt="" /> : cohort.kind === "PAIR" ? "2" : cohort.memberships.length}</span>
           <span className="student-list-copy"><strong>{cohort.name}</strong><small>{cohort.kind === "PAIR" ? "Пара" : "Группа"} · {cohort.memberships.length} участн.</small></span>
           <span className="student-list-status status-active"><i aria-hidden="true" />Занимаются</span>
           <span className="student-list-open">Открыть →</span>

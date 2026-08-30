@@ -74,6 +74,7 @@ enum LearningRecordKind {
 model TeacherSettings {
   id                    String   @id @default("primary")
   displayName           String   @default("Маша")
+  avatarUrl             String?
   timezone              String   @default("Europe/Moscow")
   defaultLessonDuration Int      @default(60)
   currency              String   @default("RUB")
@@ -111,6 +112,7 @@ model Cohort {
   id              String             @id @default(cuid())
   name            String
   kind            CohortKind
+  imageUrl        String?
   color           String
   activeFrom      DateTime           @db.Date
   activeTo        DateTime?          @db.Date
