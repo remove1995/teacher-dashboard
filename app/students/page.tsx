@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { statusLabels } from "@/lib/format";
-import { hasIndividualLearningContext } from "@/lib/domain/people";
+import { hasIndividualLearningContext, resolveStudentListEntityType } from "@/lib/domain/people";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ const filters: Array<{ value: EntityType; label: string }> = [
 
 export default async function StudentsPage({ searchParams }: { searchParams: Promise<StudentsSearch> }) {
   const search = await searchParams;
-  const activeType = filters.some(({ value }) => value === search.type) ? search.type as EntityType : "all";
+  const activeType = resolveStudentListEntityType(search.type);
   const query = search.q?.trim() ?? "";
   const normalizedQuery = query.toLocaleLowerCase("ru");
 

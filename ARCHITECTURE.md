@@ -28,7 +28,7 @@ UI code must not embed financial, recurrence, attendance, or credit calculations
 - belong to multiple pairs or groups over time;
 - belong to several teaching contexts simultaneously.
 
-Pairs and groups are represented as `Cohort` records with a `PAIR` or `GROUP` kind. `CohortMembership` records contain effective dates and participant-level commercial overrides. Teaching formats are derived from active memberships and lessons, never from a permanent student type.
+Pairs and groups are represented as `Cohort` records with a `PAIR` or `GROUP` kind. `CohortMembership` records contain effective dates, a regular/trial lifecycle, an optional trial lesson date, and participant-level commercial history. Teaching formats are derived from active memberships and lessons, never from a permanent student type. A trial member participates only in the selected trial occurrence until explicitly converted; conversion records `regularFrom` so the trial gap is not retroactively treated as regular attendance.
 
 `Student.archivedAt` is the soft-delete boundary for beta operations. Archived students are excluded from active lists and selectors while their lessons, attendance, memberships, billing history, payments, credits, and learning records remain intact. Permanent deletion is a separate confirmed action that explicitly removes the student-owned dependency graph in a transaction; shared cohorts and unrelated student data are retained.
 
@@ -37,9 +37,9 @@ Pairs and groups are represented as `Cohort` records with a `PAIR` or `GROUP` ki
 Billing belongs to an individual student within a context. `BillingProfile` therefore links a student to either:
 
 - the individual context (`cohortId` is null); or
-- a specific pair/group context.
+- a specific `CohortMembership` (while retaining `cohortId` for reporting and compatibility).
 
-The profile stores the billing model and rate/subscription amount. Members of the same cohort may have different prices, billing models, and payment timing.
+The profile stores the billing model and rate/subscription amount. Effective-dated profiles form a non-overlapping history for one membership. Members of the same cohort may have different prices, billing models, and payment timing. Existing `Payment` rows keep their original billing profile, model, suggested amount, and actual amount when later rates change.
 
 An active standalone individual learning context is represented by an effective individual `BillingProfile` (`cohortId` is null); pair/group contexts are represented by effective `CohortMembership` records with their own context billing profiles. Student onboarding edits these existing records rather than storing a permanent format enum. Ending a context closes membership and billing effective dates, preserving historical lessons, attendance, payments, and earlier billing profiles.
 
@@ -96,6 +96,8 @@ Expected payment is derived from the billing profile effective for the period, c
 
 Credits are explicit, teacher-confirmed records. Cancellation alone never creates a credit. A credit may be created only when the teacher confirms that a paid individual/pair lesson will not be made up and its value should carry forward.
 
+Trial-to-regular conversion has a separate explicit credit decision. If selected, the received trial `Payment` remains unchanged and becomes the provenance of a `Credit` through `sourcePaymentId`. The credit reduces only the first subscription in the same cohort context. Application is capped at the charge; excess is split into a new available credit rather than creating a negative balance.
+
 A student absence from a group subscription creates no credit when the group lesson took place.
 
 ### Learning records and attachments
@@ -123,6 +125,10 @@ Parent feedback is generated deterministically as an editable, unsaved draft fro
 13. Learning records remain student-owned.
 14. All money uses integer minor units to avoid floating-point errors.
 15. Calendar dates and local lesson times are modeled explicitly; application timezone conversion occurs at system boundaries.
+
+### Restore deployment boundary
+
+Restore v1 performs a full replacement of the application database and is suitable only for the current single-user TutorFlow deployment. It must not be reused unchanged in a future multi-user or multi-tenant SaaS version. A future restore flow must validate, delete, and recreate data strictly within one teacher, account, or tenant scope.
 
 ## Foundation Scope
 

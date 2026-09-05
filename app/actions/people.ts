@@ -1,12 +1,15 @@
 "use server";
 
-import type { BillingModel, CohortKind, Prisma, StudentStatus } from "@prisma/client";
+import type { BillingModel, CohortKind, CohortMemberStatus, Prisma, StudentStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { dateOnly, previousDate, todayDate } from "@/lib/domain/dates";
 import { normalizeTags, planMembershipChanges, validateCohortParticipants } from "@/lib/domain/people";
 import { prisma } from "@/lib/db/prisma";
 import { archiveStudentRecord, permanentlyDeleteStudentRecord } from "@/lib/services/student-lifecycle-service";
+import { validateMemberBilling } from "@/lib/domain/member-billing";
+import { setEffectiveBillingProfile } from "@/lib/services/member-billing-service";
+import { createTrialPaymentCredits } from "@/lib/services/trial-credit-service";
 
 const billingModels = new Set<BillingModel>(["MONTHLY_PREPAID", "WEEKLY_PREPAID", "PAY_PER_LESSON", "GROUP_SUBSCRIPTION"]);
 const studentStatuses = new Set<StudentStatus>(["ACTIVE", "PAUSED", "COMPLETED"]);
@@ -35,14 +38,7 @@ async function replaceTags(tx: Prisma.TransactionClient, owner: { studentId: str
 }
 
 async function setBilling(tx: Prisma.TransactionClient, input: { studentId: string; cohortId: string | null; model: BillingModel; amountMinor: number; effectiveFrom: string }) {
-  const effectiveFrom = dateOnly(input.effectiveFrom);
-  const current = await tx.billingProfile.findFirst({ where: { studentId: input.studentId, cohortId: input.cohortId, effectiveFrom: { lte: effectiveFrom }, OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveFrom } }] }, orderBy: { effectiveFrom: "desc" } });
-  if (current && current.model === input.model && current.amountMinor === input.amountMinor) return current;
-  if (current?.effectiveFrom.getTime() === effectiveFrom.getTime()) {
-    return tx.billingProfile.update({ where: { id: current.id }, data: { model: input.model, amountMinor: input.amountMinor } });
-  }
-  if (current) await tx.billingProfile.update({ where: { id: current.id }, data: { effectiveTo: dateOnly(previousDate(input.effectiveFrom)) } });
-  return tx.billingProfile.create({ data: { ...input, effectiveFrom } });
+  return setEffectiveBillingProfile(tx, input);
 }
 
 function studentInput(formData: FormData) {
@@ -90,10 +86,12 @@ async function syncStudentContexts(tx: Prisma.TransactionClient, studentId: stri
   if (cohorts.length !== selectedCohortIds.length) throw new Error("Один из выбранных учебных контекстов недоступен");
   for (const cohortId of selectedCohortIds) {
     if (!activeIds.has(cohortId)) await tx.cohortMembership.create({ data: { studentId, cohortId, activeFrom: effectiveDate } });
-    await setBilling(tx, { studentId, cohortId, effectiveFrom, ...contextBilling(formData, `cohort:${cohortId}`) });
+    const membership = activeMemberships.find((item) => item.cohortId === cohortId) ?? await tx.cohortMembership.findFirstOrThrow({ where: { studentId, cohortId, activeTo: null }, orderBy: { activeFrom: "desc" } });
+    const billingEffectiveFrom = optional(formData, `billingEffectiveFrom:cohort:${cohortId}`) ?? effectiveFrom;
+    await setEffectiveBillingProfile(tx, { studentId, cohortId, membershipId: membership.id, effectiveFrom: billingEffectiveFrom, ...contextBilling(formData, `cohort:${cohortId}`) });
   }
 
-  if (individualEnabled) await setBilling(tx, { studentId, cohortId: null, effectiveFrom, ...contextBilling(formData, "individual") });
+  if (individualEnabled) await setBilling(tx, { studentId, cohortId: null, effectiveFrom: optional(formData, "billingEffectiveFrom:individual") ?? effectiveFrom, ...contextBilling(formData, "individual") });
   else await endBillingContext(tx, studentId, null, effectiveFrom);
 }
 
@@ -158,7 +156,11 @@ function cohortInput(formData: FormData) {
     if (mode !== "existing" && mode !== "new") throw new Error("Invalid participant mode");
     const model = required(formData, `billingModel:${key}`) as BillingModel;
     if (!billingModels.has(model)) throw new Error("Invalid billing model");
-    return { key, mode: mode as "existing" | "new", studentId: optional(formData, `participantStudentId:${key}`), name: optional(formData, `participantName:${key}`), model, amountMinor: moneyMinor(required(formData, `rate:${key}`)), rateChangeFrom: optional(formData, `rateChangeFrom:${key}`) };
+    const status = (optional(formData, `participantStatus:${key}`) ?? "REGULAR") as CohortMemberStatus;
+    if (status !== "REGULAR" && status !== "TRIAL") throw new Error("Invalid member status");
+    const trialLessonDate = optional(formData, `trialLessonDate:${key}`);
+    validateMemberBilling({ status, model, trialLessonDate });
+    return { key, mode: mode as "existing" | "new", studentId: optional(formData, `participantStudentId:${key}`), name: optional(formData, `participantName:${key}`), model, amountMinor: moneyMinor(required(formData, `rate:${key}`)), rateChangeFrom: optional(formData, `rateChangeFrom:${key}`), status, trialLessonDate, applyTrialCredit: formData.has(`applyTrialCredit:${key}`) };
   });
   validateCohortParticipants(kind, participants);
   return { kind, name: required(formData, "name"), imageUrl: optional(formData, "imageUrl"), color: required(formData, "color"), activeFrom, activeTo: optional(formData, "activeTo"), defaultRateMinor: moneyMinor(required(formData, "defaultRate")), tagNames: tags(formData), participants };
@@ -187,20 +189,34 @@ async function resolveParticipants(tx: Prisma.TransactionClient, input: ReturnTy
 }
 
 async function syncMembers(tx: Prisma.TransactionClient, cohortId: string, input: ReturnType<typeof cohortInput>, participants: ResolvedParticipant[]) {
-  const existing = await tx.cohortMembership.findMany({ where: { cohortId, activeTo: null } });
+  const today = dateOnly(todayDate());
+  const existing = await tx.cohortMembership.findMany({ where: { cohortId, OR: [{ activeTo: null }, { activeTo: { gte: today } }] } });
   const memberIds = participants.map(({ studentId }) => studentId);
   const changes = planMembershipChanges(existing.map(({ studentId }) => studentId), memberIds);
   const closingDate = dateOnly(todayDate());
   const removedIds = changes.removed;
   if (removedIds.length) {
-    await tx.cohortMembership.updateMany({ where: { cohortId, activeTo: null, studentId: { in: removedIds } }, data: { activeTo: closingDate } });
+    await tx.cohortMembership.updateMany({ where: { id: { in: existing.filter(({ studentId }) => removedIds.includes(studentId)).map(({ id }) => id) } }, data: { activeTo: closingDate } });
     await tx.billingProfile.updateMany({ where: { cohortId, studentId: { in: removedIds }, effectiveTo: null }, data: { effectiveTo: closingDate } });
   }
   for (const participant of participants) {
     const { studentId } = participant;
-    if (changes.added.includes(studentId)) await tx.cohortMembership.create({ data: { cohortId, studentId, activeFrom: dateOnly(input.activeFrom) } });
-    const effectiveFrom = changes.added.includes(studentId) ? input.activeFrom : participant.rateChangeFrom ?? todayDate();
-    await setBilling(tx, { studentId, cohortId, model: participant.model, amountMinor: participant.amountMinor, effectiveFrom });
+    let membership = existing.find((item) => item.studentId === studentId);
+    const convertingTrial = membership?.status === "TRIAL" && participant.status === "REGULAR";
+    const effectiveFrom = participant.status === "TRIAL" ? participant.trialLessonDate! : changes.added.includes(studentId) ? input.activeFrom : participant.rateChangeFrom ?? todayDate();
+    const membershipFrom = participant.status === "TRIAL" ? participant.trialLessonDate! : input.activeFrom;
+    if (changes.added.includes(studentId)) membership = await tx.cohortMembership.create({ data: { cohortId, studentId, activeFrom: dateOnly(membershipFrom), status: participant.status, trialLessonDate: participant.trialLessonDate ? dateOnly(participant.trialLessonDate) : null, regularFrom: participant.status === "REGULAR" ? dateOnly(membershipFrom) : null } });
+    else membership = await tx.cohortMembership.update({ where: { id: membership!.id }, data: { status: participant.status, trialLessonDate: membership!.trialLessonDate ?? (participant.trialLessonDate ? dateOnly(participant.trialLessonDate) : null), regularFrom: participant.status === "REGULAR" ? membership!.regularFrom ?? dateOnly(effectiveFrom) : null } });
+    await setEffectiveBillingProfile(tx, { studentId, cohortId, membershipId: membership.id, model: participant.model, amountMinor: participant.amountMinor, effectiveFrom });
+    if (convertingTrial && participant.applyTrialCredit) {
+      const periodDate = dateOnly(effectiveFrom);
+      const destinationPeriodLabel = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric", timeZone: "UTC" }).format(periodDate).replace(/^./, (letter) => letter.toUpperCase());
+      await createTrialPaymentCredits(tx, { membershipId: membership.id, studentId, cohortId, destinationPeriodLabel });
+    }
+    if (participant.status === "TRIAL" && participant.trialLessonDate) {
+      const lesson = await tx.lesson.findFirst({ where: { cohortId, scheduledDate: dateOnly(participant.trialLessonDate) }, orderBy: { startMinute: "asc" } });
+      if (lesson) await tx.attendance.upsert({ where: { lessonId_studentId: { lessonId: lesson.id, studentId } }, update: {}, create: { lessonId: lesson.id, studentId, status: "PLANNED" } });
+    }
   }
   return memberIds.length;
 }

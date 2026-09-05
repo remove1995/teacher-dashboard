@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { addLessonStage, addLessonTag, clearLessonPlan, deleteLesson, materializeLesson, moveLessonOnMobile, deleteLessonStage, removeLessonTag, reorderLessonStages, toggleLessonStage, updateLessonDate, updateLessonField, updateLessonStage } from "@/app/actions/lessons";
 import { suggestDateInMonth } from "@/lib/domain/lesson";
 import { ShareActions } from "@/components/share-actions";
@@ -56,6 +56,37 @@ export function AutoSaveField({ lessonId, field, value, label, multiline = false
 }
 
 type Stage = { id: string; text: string; completed: boolean; sortOrder: number };
+
+function StageNameField({ value, onCommit }: { value: string; onCommit: (text: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => setDraft(value), [value]);
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "0px";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [draft]);
+
+  return <textarea
+    ref={textareaRef}
+    className="stage-name"
+    aria-label="Название этапа"
+    rows={1}
+    value={draft}
+    onChange={(event) => setDraft(event.target.value)}
+    onBlur={() => {
+      const text = draft.trim();
+      if (!text) {
+        setDraft(value);
+        return;
+      }
+      if (text !== value) onCommit(text);
+    }}
+  />;
+}
+
 export function StageEditor({ lessonId, initialStages }: { lessonId: string; initialStages: Stage[] }) {
   const router = useRouter();
   const [stages, setStages] = useState([...initialStages].sort((a,b) => a.sortOrder-b.sortOrder));
@@ -70,7 +101,7 @@ export function StageEditor({ lessonId, initialStages }: { lessonId: string; ini
   };
   return <section className="lesson-panel-section"><div className="lesson-section-heading"><h3>Этапы урока</h3><span>{stages.filter(({completed}) => completed).length}/{stages.length}</span></div><div className={`stage-editor ${pending ? "is-saving" : ""}`}>{stages.map((stage) => <div className="stage-edit-row" onDragOver={(event) => event.preventDefault()} onDrop={() => dropOn(stage.id)} key={stage.id}>
     <button className="stage-drag-handle" type="button" draggable aria-label="Перетащить этап" onDragStart={() => setDraggedId(stage.id)} onDragEnd={() => setDraggedId(null)}>⠿</button><input aria-label="Этап завершён" type="checkbox" checked={stage.completed} onChange={(event) => { const completed=event.target.checked; setStages((items) => items.map((item) => item.id===stage.id ? {...item,completed}:item)); refresh(() => toggleLessonStage(stage.id, completed)); }} />
-    <input className="stage-name" defaultValue={stage.text} onBlur={(event) => { const text=event.currentTarget.value.trim(); if(text && text!==stage.text){ setStages((items)=>items.map((item)=>item.id===stage.id?{...item,text}:item)); const data=new FormData();data.set("text",text);refresh(()=>updateLessonStage(stage.id,data)); } }} />
+    <StageNameField value={stage.text} onCommit={(text) => { setStages((items)=>items.map((item)=>item.id===stage.id?{...item,text}:item)); const data=new FormData();data.set("text",text);refresh(()=>updateLessonStage(stage.id,data)); }} />
     <button className="icon-button" type="button" aria-label="Удалить этап" onClick={() => { setStages((items)=>items.filter(({id})=>id!==stage.id)); refresh(()=>deleteLessonStage(stage.id)); }}>×</button>
   </div>)}</div><form className="inline-add" action={(data) => { const text=String(data.get("text")??"").trim(); if(!text)return; refresh(()=>addLessonStage(lessonId,data)); (document.activeElement as HTMLElement | null)?.blur(); }}><input name="text" placeholder="Добавить этап" /><button type="submit">Добавить</button></form></section>;
 }

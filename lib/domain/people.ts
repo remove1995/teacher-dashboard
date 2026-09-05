@@ -1,6 +1,12 @@
 export const STUDENT_EDITABLE_FIELDS = ["name", "yearOrLevel", "status", "color", "tags", "learningContexts", "contextBilling", "contextEffectiveFrom", "notesPrivate", "imageUrl"] as const;
 export const COHORT_EDITABLE_FIELDS = ["name", "kind", "imageUrl", "color", "tags", "activeFrom", "activeTo", "defaultRate", "memberships", "participantBillingModel", "participantRate"] as const;
 
+export type StudentListEntityType = "all" | "individual" | "pair" | "group";
+
+export function resolveStudentListEntityType(value?: string): StudentListEntityType {
+  return value === "all" || value === "pair" || value === "group" || value === "individual" ? value : "individual";
+}
+
 export function normalizeTags(value: string) {
   return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
 }

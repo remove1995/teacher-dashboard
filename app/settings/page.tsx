@@ -1,8 +1,9 @@
 import { saveTeacherSettings } from "@/app/settings/actions";
 import { getTeacherSettings } from "@/lib/settings";
 import { TeacherAvatarUrlField } from "@/components/teacher-avatar-url-field";
+import { BackupDownloadButton } from "@/components/backup-download-button";
 
-type Search = { saved?: string; error?: string };
+type Search = { saved?: string; restored?: string; error?: string };
 const errors: Record<string, string> = {
   name: "Укажите имя длиной до 80 символов.",
   timezone: "Укажите корректный часовой пояс.",
@@ -15,6 +16,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   return <div className="page-stack settings-page">
     <header className="page-heading"><h1>Настройки</h1></header>
     {search.saved === "1" && <p className="settings-feedback settings-feedback-success" role="status">Настройки сохранены.</p>}
+    {search.restored === "1" && <p className="settings-feedback settings-feedback-success" role="status">Данные восстановлены из резервной копии.</p>}
     {search.error && <p className="settings-feedback settings-feedback-error" role="alert">{errors[search.error] ?? "Не удалось сохранить настройки."}</p>}
     <form action={saveTeacherSettings} className="settings-form">
       <section className="settings-section">
@@ -37,7 +39,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </section>
       <section className="settings-section settings-data-section">
         <div><h2>Данные</h2></div>
-        <div><button className="secondary-button" type="button" disabled>Экспорт / резервная копия — скоро</button></div>
+        <BackupDownloadButton />
       </section>
       <footer className="settings-actions"><button type="submit">Сохранить изменения</button></footer>
     </form>

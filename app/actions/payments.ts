@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { paymentStatus } from "@/lib/domain/money";
+import { splitCreditApplication } from "@/lib/domain/trial-credit";
 
 const date = (value: FormDataEntryValue | null) => {
   if (!value) throw new Error("Укажите дату");
@@ -54,11 +55,14 @@ export async function createPayment(formData: FormData) {
     } });
     let remainingCredit = Math.max(0, minor(formData.get("creditApplied"), "Кредит"));
     if (remainingCredit) {
-      const credits = await tx.credit.findMany({ where: { studentId, status: "AVAILABLE", OR: [{ destinationPeriodLabel: null }, { destinationPeriodLabel: periodLabel }] }, orderBy: { confirmedAt: "asc" } });
+      const credits = await tx.credit.findMany({ where: { studentId, status: "AVAILABLE", AND: [{ OR: [{ destinationPeriodLabel: null }, { destinationPeriodLabel: periodLabel }] }, { OR: [{ sourcePaymentId: null }, { sourcePayment: { cohortId } }] }] }, orderBy: { confirmedAt: "asc" } });
       for (const credit of credits) {
         if (remainingCredit <= 0) break;
-        await tx.credit.update({ where: { id: credit.id }, data: { status: "APPLIED", destinationPaymentId: payment.id, destinationPeriodLabel: periodLabel } });
-        remainingCredit -= credit.amountMinor;
+        const allocation = splitCreditApplication(credit.amountMinor, remainingCredit);
+        if (!allocation.appliedMinor) continue;
+        await tx.credit.update({ where: { id: credit.id }, data: { amountMinor: allocation.appliedMinor, status: "APPLIED", destinationPaymentId: payment.id, destinationPeriodLabel: periodLabel } });
+        if (allocation.remainingMinor) await tx.credit.create({ data: { studentId: credit.studentId, sourceLessonId: credit.sourceLessonId, sourcePaymentId: credit.sourcePaymentId, sourcePeriodLabel: credit.sourcePeriodLabel, amountMinor: allocation.remainingMinor, status: "AVAILABLE", confirmedAt: credit.confirmedAt, note: credit.note } });
+        remainingCredit -= allocation.appliedMinor;
       }
     }
   });

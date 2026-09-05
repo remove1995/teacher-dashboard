@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { billableContextKeys, COHORT_EDITABLE_FIELDS, contextActiveInPeriod, hasIndividualLearningContext, normalizeTags, planMembershipChanges, STUDENT_EDITABLE_FIELDS, validateCohortParticipants } from "./people";
+import { billableContextKeys, COHORT_EDITABLE_FIELDS, contextActiveInPeriod, hasIndividualLearningContext, normalizeTags, planMembershipChanges, resolveStudentListEntityType, STUDENT_EDITABLE_FIELDS, validateCohortParticipants } from "./people";
 
 const augustStart = new Date("2026-08-01");
 const augustEnd = new Date("2026-08-31");
 
 describe("existing entity edits", () => {
+  it("opens the Students list on Individual by default while preserving explicit tabs", () => {
+    expect(resolveStudentListEntityType()).toBe("individual");
+    expect(resolveStudentListEntityType("all")).toBe("all");
+    expect(resolveStudentListEntityType("pair")).toBe("pair");
+    expect(resolveStudentListEntityType("group")).toBe("group");
+  });
   it("recognizes only explicit individual learning contexts", () => {
     expect(hasIndividualLearningContext({ individualSchedules: [{}], billingProfiles: [] })).toBe(true);
     expect(hasIndividualLearningContext({ individualSchedules: [], billingProfiles: [{}] })).toBe(true);

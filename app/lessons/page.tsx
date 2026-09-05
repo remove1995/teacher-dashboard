@@ -7,6 +7,7 @@ import { LessonKanbanBoard, type KanbanColumnData } from "@/components/lesson-ka
 import { prisma } from "@/lib/db/prisma";
 import { chooseNextGeneratedOccurrence, defaultLessonDate, homeworkState, orderLessonMonths, sortKanbanLessons } from "@/lib/domain/lesson";
 import { minuteToTime } from "@/lib/domain/dates";
+import { getActiveLearningEntities } from "@/lib/services/learning-entity-service";
 
 export const dynamic="force-dynamic";
 type Search={entity?:string;lesson?:string;q?:string;tag?:string|string[];focusMonth?:string};
@@ -17,8 +18,7 @@ function workspaceHref(search:Search,updates:Record<string,string|null>){const p
 
 export default async function LessonsPage({searchParams}:{searchParams:Promise<Search>}){
  const search=await searchParams;
- const [students,cohorts,allTags]=await Promise.all([prisma.student.findMany({where:{archivedAt:null,status:{not:"COMPLETED"}},orderBy:{name:"asc"},select:{id:true,name:true,color:true}}),prisma.cohort.findMany({orderBy:{name:"asc"},select:{id:true,name:true,color:true,kind:true}}),prisma.tag.findMany({orderBy:{name:"asc"},select:{id:true,name:true}})]);
- const entities=[...students.map(student=>({value:`student:${student.id}`,label:student.name,kind:"Ученик",color:student.color,type:"student" as const,id:student.id})),...cohorts.map(cohort=>({value:`cohort:${cohort.id}`,label:cohort.name,kind:cohort.kind==="PAIR"?"Пара":"Группа",color:cohort.color,type:"cohort" as const,id:cohort.id}))];
+ const [entities,allTags]=await Promise.all([getActiveLearningEntities(),prisma.tag.findMany({orderBy:{name:"asc"},select:{id:true,name:true}})]);
  if(!entities.length)return <div className="empty-state"><h1>Сначала добавьте ученика</h1><Link className="button" href="/students/new">Добавить ученика</Link></div>;
  const selectedEntity=entities.find(({value})=>value===search.entity)??entities[0];const entityValue=selectedEntity.value;const entityWhere=selectedEntity.type==="student"?{studentId:selectedEntity.id}:{cohortId:selectedEntity.id};
  const selectedTags=Array.isArray(search.tag)?search.tag:search.tag?[search.tag]:[];const tagConditions=selectedTags.map(name=>({tags:{some:{tag:{name}}}}));const query=search.q?.trim();const textCondition=query?{OR:[{title:{contains:query,mode:"insensitive" as const}},{goal:{contains:query,mode:"insensitive" as const}},{homeworkText:{contains:query,mode:"insensitive" as const}},{notes:{contains:query,mode:"insensitive" as const}},{stages:{some:{text:{contains:query,mode:"insensitive" as const}}}},{tags:{some:{tag:{name:{contains:query,mode:"insensitive" as const}}}}}]}:{};

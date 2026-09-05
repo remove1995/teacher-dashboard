@@ -1,9 +1,32 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { dateOnly, previousDate, todayDate, toDateInput } from "@/lib/domain/dates";
-import { generateOccurrences, nextScheduleRevision, sourceOccurrenceDate, type WeeklySlot } from "@/lib/domain/schedule";
-import { defaultLessonDate } from "@/lib/domain/lesson";
+import { dateOnly, previousDate, todayDate, toDateInput } from "../domain/dates";
+import { generateOccurrences, nextScheduleRevision, sourceOccurrenceDate, type WeeklySlot } from "../domain/schedule";
+import { defaultLessonDate } from "../domain/lesson";
+import { canRescheduleOccurrence, hasRealLessonHistory, isEmptyPlannedOccurrence, OCCURRENCE_HAS_HISTORY } from "../domain/lesson-occurrence";
 
 type Db = PrismaClient | Prisma.TransactionClient;
+
+const occurrenceSafetyInclude = {
+  student: { select: { name: true } },
+  cohort: { select: { name: true } },
+  attendance: { select: { status: true, note: true, manuallyEdited: true, studentId: true } },
+  stages: { select: { id: true } }, tags: { select: { lessonId: true } }, attachments: { select: { id: true } },
+  credits: { select: { id: true } }, learningRecords: { select: { id: true } }, testResults: { select: { id: true } },
+  replacementLesson: { select: { id: true } }, recurringSchedule: { select: { timezone: true } },
+} satisfies Prisma.LessonInclude;
+
+function occurrenceSnapshot(lesson: Awaited<ReturnType<typeof findOccurrence>>) {
+  const ownerName = lesson.student?.name ?? lesson.cohort?.name;
+  return { ...lesson, defaultTitle: ownerName ? `Урок · ${ownerName}` : null };
+}
+
+async function findOccurrence(db: Db, lessonId: string) {
+  return db.lesson.findUniqueOrThrow({ where: { id: lessonId }, include: occurrenceSafetyInclude });
+}
+
+export class ScheduleDomainError extends Error {
+  constructor(message: string) { super(message); this.name = "ScheduleDomainError"; }
+}
 
 export type ScheduleTarget = { studentId: string; cohortId?: never } | { cohortId: string; studentId?: never };
 
@@ -21,18 +44,19 @@ async function targetDetails(db: Db, target: ScheduleTarget, occurrenceDate: Dat
   }
   const cohort = await db.cohort.findUniqueOrThrow({
     where: { id: target.cohortId },
-    select: { name: true, memberships: { where: { activeFrom: { lte: occurrenceDate }, OR: [{ activeTo: null }, { activeTo: { gte: occurrenceDate } }] }, select: { studentId: true } } },
+    select: { name: true, memberships: { where: { activeFrom: { lte: occurrenceDate }, AND: [{ OR: [{ activeTo: null }, { activeTo: { gte: occurrenceDate } }] }, { OR: [{ status: "REGULAR", OR: [{ regularFrom: null }, { regularFrom: { lte: occurrenceDate } }] }, { trialLessonDate: occurrenceDate }] }] }, select: { studentId: true } } },
   });
   return { title: `Урок · ${cohort.name}`, attendanceStudentIds: cohort.memberships.map(({ studentId }) => studentId) };
 }
 
-async function generateLessons(db: Db, schedule: { id: string; revision: number; effectiveFrom: Date; effectiveTo: Date | null; studentId: string | null; cohortId: string | null; timezone: string; slots: WeeklySlot[] }, excludedSourceDates = new Set<string>()) {
+async function generateLessons(db: Db, schedule: { id: string; revision: number; effectiveFrom: Date; effectiveTo: Date | null; studentId: string | null; cohortId: string | null; timezone: string; slots: WeeklySlot[]; exceptions?: Array<{ occurrenceDate: Date; kind: "CANCEL" | "BREAK" | "OCCURRENCE_OVERRIDE"; replacementDate: Date | null; replacementStartMinute: number | null; replacementDurationMinutes: number | null }> }, excludedSourceDates = new Set<string>()) {
   if (!schedule.effectiveTo) throw new Error("Phase 1 schedules require an effective end date");
   const start = [toDateInput(schedule.effectiveFrom), todayDate(schedule.timezone)].sort().at(-1)!;
   const end = toDateInput(schedule.effectiveTo);
   if (start > end) return 0;
   const target: ScheduleTarget = schedule.studentId ? { studentId: schedule.studentId } : { cohortId: schedule.cohortId! };
-  const occurrences = generateOccurrences({ effectiveFrom: start, effectiveTo: end, slots: schedule.slots }).filter(({ date }) => !excludedSourceDates.has(date));
+  const exceptions = schedule.exceptions?.map((exception) => ({ occurrenceDate: toDateInput(exception.occurrenceDate), kind: exception.kind, replacementDate: exception.replacementDate ? toDateInput(exception.replacementDate) : undefined, replacementStartMinute: exception.replacementStartMinute ?? undefined, replacementDurationMinutes: exception.replacementDurationMinutes ?? undefined }));
+  const occurrences = generateOccurrences({ effectiveFrom: start, effectiveTo: end, slots: schedule.slots, exceptions }).filter(({ replacesDate, date }) => !excludedSourceDates.has(replacesDate ?? date));
   let generated = 0;
   for (const occurrence of occurrences) {
     const occurrenceDate = dateOnly(defaultLessonDate({ source: "recurring", generatedDate: occurrence.date }));
@@ -59,12 +83,12 @@ async function generateLessons(db: Db, schedule: { id: string; revision: number;
 }
 
 export async function generateLessonsForSchedule(db: Db, scheduleId: string) {
-  const schedule = await db.recurringSchedule.findUniqueOrThrow({ where: { id: scheduleId }, include: { slots: true } });
+  const schedule = await db.recurringSchedule.findUniqueOrThrow({ where: { id: scheduleId }, include: { slots: true, exceptions: true } });
   return generateLessons(db, schedule);
 }
 
 export async function createSchedule(db: Db, definition: ScheduleDefinition) {
-  if (definition.effectiveTo < definition.effectiveFrom) throw new Error("Schedule end date must not be before its start date");
+  if (definition.effectiveTo < definition.effectiveFrom) throw new ScheduleDomainError("Дата окончания не может быть раньше даты начала.");
   const schedule = await db.recurringSchedule.create({
     data: {
       studentId: definition.studentId ?? null,
@@ -82,14 +106,15 @@ export async function createSchedule(db: Db, definition: ScheduleDefinition) {
 
 export async function replaceFutureSchedule(db: Db, scheduleId: string, changeFrom: string, definition: Omit<ScheduleDefinition, keyof ScheduleTarget>) {
   const cutoff = dateOnly(changeFrom);
-  const current = await db.recurringSchedule.findUniqueOrThrow({ where: { id: scheduleId }, include: { slots: true } });
-  if (changeFrom < todayDate(current.timezone)) throw new Error("Past schedules cannot be changed");
-  if (cutoff < current.effectiveFrom || (current.effectiveTo && cutoff > current.effectiveTo)) throw new Error("Change date must be inside the schedule period");
-  if (definition.effectiveTo < changeFrom) throw new Error("Schedule end date must not be before the change date");
+  const current = await db.recurringSchedule.findUniqueOrThrow({ where: { id: scheduleId }, include: { slots: true, exceptions: true } });
+  if (changeFrom < todayDate(current.timezone)) throw new ScheduleDomainError("Дата начала новой версии расписания не может быть в прошлом.");
+  if (current.effectiveTo && cutoff > current.effectiveTo) throw new ScheduleDomainError("Дата начала должна входить в текущий период расписания.");
+  if (definition.effectiveTo < changeFrom) throw new ScheduleDomainError("Дата окончания не может быть раньше даты начала.");
 
-  const futureLessons = await db.lesson.findMany({ where: { recurringScheduleId: scheduleId, scheduledDate: { gte: cutoff } }, select: { id: true, generationKey: true, manuallyEdited: true, kanbanVisible: true, status: true } });
-  const preservedSourceDates = new Set(futureLessons.filter(({ manuallyEdited, kanbanVisible, status }) => manuallyEdited || kanbanVisible || status !== "PLANNED").flatMap(({ generationKey }) => { const value = sourceOccurrenceDate(generationKey); return value ? [value] : []; }));
-  const replaceableIds = futureLessons.filter(({ manuallyEdited, kanbanVisible, status }) => !manuallyEdited && !kanbanVisible && status === "PLANNED").map(({ id }) => id);
+  const scheduleLessons = await db.lesson.findMany({ where: { recurringScheduleId: scheduleId }, include: occurrenceSafetyInclude });
+  const preservedSourceDates = new Set(scheduleLessons.filter((lesson) => lesson.manuallyEdited || lesson.kanbanVisible || !isEmptyPlannedOccurrence(occurrenceSnapshot(lesson))).flatMap(({ generationKey }) => { const value = sourceOccurrenceDate(generationKey); return value ? [value] : []; }));
+  for (const exception of current.exceptions) if (exception.kind === "BREAK" || exception.kind === "CANCEL") preservedSourceDates.add(toDateInput(exception.occurrenceDate));
+  const replaceableIds = scheduleLessons.filter((lesson) => !lesson.manuallyEdited && !lesson.kanbanVisible && isEmptyPlannedOccurrence(occurrenceSnapshot(lesson))).map(({ id }) => id);
   if (replaceableIds.length) {
     await db.attendance.deleteMany({ where: { lessonId: { in: replaceableIds } } });
     await db.lesson.deleteMany({ where: { id: { in: replaceableIds }, status: "PLANNED", originalLessonId: null } });
@@ -109,19 +134,20 @@ export async function replaceFutureSchedule(db: Db, scheduleId: string, changeFr
     include: { slots: true },
   });
   const generatedCount = await generateLessons(db, next, preservedSourceDates);
-  return { schedule: next, generatedCount, preservedCount: futureLessons.length - replaceableIds.length };
+  return { schedule: next, generatedCount, preservedCount: scheduleLessons.length - replaceableIds.length };
 }
 
 export async function rescheduleOccurrence(db: Db, lessonId: string, replacement: { date: string; startMinute: number; durationMinutes: number }) {
-  const lesson = await db.lesson.findUniqueOrThrow({ where: { id: lessonId }, include: { attendance: true, recurringSchedule: { select: { timezone: true } } } });
+  const lesson = await findOccurrence(db, lessonId);
   const today = todayDate(lesson.recurringSchedule?.timezone);
-  if (toDateInput(lesson.scheduledDate) < today) throw new Error("Past lessons cannot be rescheduled");
-  if (replacement.date < today) throw new Error("A replacement lesson cannot be moved into the past");
-  if (lesson.status !== "PLANNED") throw new Error("Only planned lessons can be rescheduled");
+  const isPast = toDateInput(lesson.scheduledDate) < today;
+  if (!canRescheduleOccurrence(occurrenceSnapshot(lesson), isPast)) throw new ScheduleDomainError(isPast ? "Прошедший урок с историей нельзя перенести." : "Перенести можно только запланированное занятие.");
+  if (replacement.date < today) throw new ScheduleDomainError("Новое занятие нельзя переносить в прошлое.");
   const target: ScheduleTarget = lesson.studentId ? { studentId: lesson.studentId } : { cohortId: lesson.cohortId! };
   if (lesson.recurringScheduleId) {
-    await db.scheduleException.deleteMany({ where: { scheduleId: lesson.recurringScheduleId, occurrenceDate: lesson.scheduledDate } });
-    await db.scheduleException.create({ data: { scheduleId: lesson.recurringScheduleId, occurrenceDate: lesson.scheduledDate, kind: "OCCURRENCE_OVERRIDE", replacementDate: dateOnly(replacement.date), replacementStartMinute: replacement.startMinute, replacementDurationMinutes: replacement.durationMinutes } });
+    const sourceDate = sourceOccurrenceDate(lesson.generationKey) ?? toDateInput(lesson.scheduledDate);
+    await db.scheduleException.deleteMany({ where: { scheduleId: lesson.recurringScheduleId, occurrenceDate: dateOnly(sourceDate) } });
+    await db.scheduleException.create({ data: { scheduleId: lesson.recurringScheduleId, occurrenceDate: dateOnly(sourceDate), kind: "OCCURRENCE_OVERRIDE", replacementDate: dateOnly(replacement.date), replacementStartMinute: replacement.startMinute, replacementDurationMinutes: replacement.durationMinutes } });
   }
   await db.attendance.updateMany({ where: { lessonId }, data: { status: "RESCHEDULED" } });
   await db.lesson.update({ where: { id: lessonId }, data: { status: "RESCHEDULED", manuallyEdited: true } });
@@ -140,4 +166,35 @@ export async function rescheduleOccurrence(db: Db, lessonId: string, replacement
       attendance: { create: lesson.attendance.map(({ studentId }) => ({ studentId, status: "PLANNED" })) },
     },
   });
+}
+
+export async function removeOccurrence(db: Db, lessonId: string) {
+  const lesson = await findOccurrence(db, lessonId);
+  if (!isEmptyPlannedOccurrence(occurrenceSnapshot(lesson))) throw new ScheduleDomainError(OCCURRENCE_HAS_HISTORY);
+  const original = lesson.originalLessonId ? await findOccurrence(db,lesson.originalLessonId) : null;
+  if (original && hasRealLessonHistory(occurrenceSnapshot(original))) throw new ScheduleDomainError(OCCURRENCE_HAS_HISTORY);
+  const source = original ?? lesson;
+  if (source.recurringScheduleId) {
+    const sourceDate = sourceOccurrenceDate(source.generationKey) ?? toDateInput(source.scheduledDate);
+    await db.scheduleException.deleteMany({ where: { scheduleId: source.recurringScheduleId, occurrenceDate: dateOnly(sourceDate) } });
+    await db.scheduleException.create({ data: { scheduleId: source.recurringScheduleId, occurrenceDate: dateOnly(sourceDate), kind: "BREAK", note: "Удалено из расписания" } });
+  }
+  const lessonIds=original?[lesson.id,original.id]:[lesson.id];
+  await db.attendance.deleteMany({ where: { lessonId: { in: lessonIds } } });
+  await db.lesson.delete({ where: { id: lessonId } });
+  if (original) await db.lesson.delete({ where: { id: original.id } });
+  return { id: lessonId, removedIds: lessonIds };
+}
+
+export async function cancelOccurrenceRecord(db: Db, lessonId: string) {
+  const lesson = await db.lesson.findUniqueOrThrow({ where: { id: lessonId } });
+  if (lesson.status !== "PLANNED") throw new ScheduleDomainError("Отменить можно только запланированное занятие.");
+  await db.lesson.update({ where: { id: lessonId }, data: { status: "CANCELLED", manuallyEdited: true } });
+  await db.attendance.updateMany({ where: { lessonId, manuallyEdited: false }, data: { status: "CANCELLED" } });
+  if (lesson.recurringScheduleId) {
+    const sourceDate=sourceOccurrenceDate(lesson.generationKey)??toDateInput(lesson.scheduledDate);
+    await db.scheduleException.deleteMany({where:{scheduleId:lesson.recurringScheduleId,occurrenceDate:dateOnly(sourceDate)}});
+    await db.scheduleException.create({data:{scheduleId:lesson.recurringScheduleId,occurrenceDate:dateOnly(sourceDate),kind:"CANCEL"}});
+  }
+  return { id: lessonId, status: "CANCELLED" as const };
 }

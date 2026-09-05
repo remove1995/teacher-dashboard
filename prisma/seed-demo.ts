@@ -58,12 +58,12 @@ async function main() {
 
   await prisma.billingProfile.createMany({ data: [
     { id: "billing-alina-monthly", studentId: "student-alina", model: "MONTHLY_PREPAID", amountMinor: 250000, effectiveFrom: date("2026-01-01") },
-    { id: "billing-adam-weekly", studentId: "student-adam", cohortId: pair.id, model: "WEEKLY_PREPAID", amountMinor: 200000, effectiveFrom: date("2026-01-01") },
-    { id: "billing-daniel-per-lesson", studentId: "student-daniel", cohortId: pair.id, model: "PAY_PER_LESSON", amountMinor: 220000, effectiveFrom: date("2026-01-01") },
-    { id: "billing-masha-group", studentId: "student-masha", cohortId: group.id, model: "GROUP_SUBSCRIPTION", amountMinor: 300000, effectiveFrom: date("2026-01-01") },
-    { id: "billing-sonya-group", studentId: "student-sonya", cohortId: group.id, model: "GROUP_SUBSCRIPTION", amountMinor: 450000, effectiveFrom: date("2026-01-01") },
-    { id: "billing-kirill-group", studentId: "student-kirill", cohortId: group.id, model: "GROUP_SUBSCRIPTION", amountMinor: 450000, effectiveFrom: date("2026-01-01") },
-    { id: "billing-rita-group", studentId: "student-rita", cohortId: group.id, model: "GROUP_SUBSCRIPTION", amountMinor: 450000, effectiveFrom: date("2026-01-01") },
+    { id: "billing-adam-weekly", studentId: "student-adam", cohortId: pair.id, membershipId: "membership-adam-pair", model: "WEEKLY_PREPAID", amountMinor: 200000, effectiveFrom: date("2026-01-01") },
+    { id: "billing-daniel-per-lesson", studentId: "student-daniel", cohortId: pair.id, membershipId: "membership-daniel-pair", model: "PAY_PER_LESSON", amountMinor: 220000, effectiveFrom: date("2026-01-01") },
+    { id: "billing-masha-group", studentId: "student-masha", cohortId: group.id, membershipId: "membership-masha-group", model: "GROUP_SUBSCRIPTION", amountMinor: 300000, effectiveFrom: date("2026-01-01") },
+    { id: "billing-sonya-group", studentId: "student-sonya", cohortId: group.id, membershipId: "membership-sonya-group", model: "GROUP_SUBSCRIPTION", amountMinor: 450000, effectiveFrom: date("2026-01-01") },
+    { id: "billing-kirill-group", studentId: "student-kirill", cohortId: group.id, membershipId: "membership-kirill-group", model: "GROUP_SUBSCRIPTION", amountMinor: 450000, effectiveFrom: date("2026-01-01") },
+    { id: "billing-rita-group", studentId: "student-rita", cohortId: group.id, membershipId: "membership-rita-group", model: "GROUP_SUBSCRIPTION", amountMinor: 450000, effectiveFrom: date("2026-01-01") },
   ] });
 
   await prisma.recurringSchedule.create({ data: { id: "schedule-alina", studentId: "student-alina", effectiveFrom: date("2026-08-01"), effectiveTo: date("2027-05-31"), timezone: "Europe/Moscow", slots: { create: [{ weekday: 2, startMinute: 990, durationMinutes: 60 }, { weekday: 5, startMinute: 990, durationMinutes: 60 }] } } });

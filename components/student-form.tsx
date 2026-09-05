@@ -53,5 +53,5 @@ function ContextCard({ title, subtitle, checked, name, value = "on", children }:
 }
 
 function BillingFields({ prefix, billing, defaultModel, defaultRateMinor }: { prefix: string; billing?: BillingValue; defaultModel: BillingModel; defaultRateMinor: number }) {
-  return <><label className="field"><span>Модель оплаты</span><select name={`billingModel:${prefix}`} defaultValue={billing?.model ?? defaultModel}>{Object.entries(billingLabels).map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label><label className="field"><span>Ставка / сумма, ₽</span><input name={`rate:${prefix}`} type="number" min="0" step="1" defaultValue={(billing?.amountMinor ?? defaultRateMinor) / 100}/></label></>;
+  return <><label className="field"><span>Модель оплаты</span><select name={`billingModel:${prefix}`} defaultValue={billing?.model ?? defaultModel}>{Object.entries(billingLabels).map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label><label className="field"><span>Ставка / сумма, ₽</span><input name={`rate:${prefix}`} type="number" min="0" step="1" defaultValue={(billing?.amountMinor ?? defaultRateMinor) / 100}/></label>{billing ? <label className="field"><span>Новые условия с</span><input name={`billingEffectiveFrom:${prefix}`} type="date" defaultValue={today}/></label> : null}</>;
 }

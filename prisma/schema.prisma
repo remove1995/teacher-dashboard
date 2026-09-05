@@ -18,6 +18,11 @@ enum CohortKind {
   GROUP
 }
 
+enum CohortMemberStatus {
+  REGULAR
+  TRIAL
+}
+
 enum BillingModel {
   MONTHLY_PREPAID
   WEEKLY_PREPAID
@@ -150,11 +155,15 @@ model CohortMembership {
   cohortId    String
   activeFrom  DateTime  @db.Date
   activeTo    DateTime? @db.Date
+  status      CohortMemberStatus @default(REGULAR)
+  trialLessonDate DateTime? @db.Date
+  regularFrom DateTime? @db.Date
   colorOverride String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   student     Student   @relation(fields: [studentId], references: [id], onDelete: Restrict)
   cohort      Cohort    @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  billingProfiles BillingProfile[]
 
   @@unique([studentId, cohortId, activeFrom])
   @@index([cohortId, activeFrom, activeTo])
@@ -165,6 +174,7 @@ model BillingProfile {
   id          String       @id @default(cuid())
   studentId   String
   cohortId    String?
+  membershipId String?
   model       BillingModel
   amountMinor Int
   effectiveFrom DateTime   @db.Date
@@ -173,9 +183,11 @@ model BillingProfile {
   updatedAt   DateTime     @updatedAt
   student     Student      @relation(fields: [studentId], references: [id], onDelete: Restrict)
   cohort      Cohort?      @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  membership  CohortMembership? @relation(fields: [membershipId], references: [id], onDelete: Restrict)
   payments    Payment[]
 
   @@index([studentId, cohortId, effectiveFrom, effectiveTo])
+  @@index([membershipId, effectiveFrom, effectiveTo])
 }
 
 model RecurringSchedule {
@@ -319,6 +331,7 @@ model Payment {
   cohort          Cohort?       @relation(fields: [cohortId], references: [id], onDelete: Restrict)
   billingProfile  BillingProfile? @relation(fields: [billingProfileId], references: [id], onDelete: SetNull)
   creditsApplied  Credit[]      @relation("CreditDestinationPayment")
+  trialCredits    Credit[]      @relation("TrialPaymentCredit")
   attachments     Attachment[]
   correctsPayment Payment?      @relation("PaymentCorrection", fields: [correctsPaymentId], references: [id], onDelete: Restrict)
   correction      Payment?      @relation("PaymentCorrection")
@@ -332,6 +345,7 @@ model Credit {
   id              String       @id @default(cuid())
   studentId       String
   sourceLessonId  String?
+  sourcePaymentId String?
   sourcePeriodLabel String?
   amountMinor     Int
   lessonEquivalent Decimal?    @db.Decimal(6, 2)
@@ -343,9 +357,11 @@ model Credit {
   createdAt       DateTime     @default(now())
   student         Student      @relation(fields: [studentId], references: [id], onDelete: Restrict)
   sourceLesson    Lesson?      @relation(fields: [sourceLessonId], references: [id], onDelete: Restrict)
+  sourcePayment   Payment?     @relation("TrialPaymentCredit", fields: [sourcePaymentId], references: [id], onDelete: Restrict)
   destinationPayment Payment?  @relation("CreditDestinationPayment", fields: [destinationPaymentId], references: [id], onDelete: Restrict)
 
   @@index([studentId, status])
+  @@index([sourcePaymentId])
 }
 
 model LearningRecord {
