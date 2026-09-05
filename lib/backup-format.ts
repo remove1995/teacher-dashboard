@@ -38,10 +38,14 @@ export const BACKUP_SCALAR_FIELDS: Record<BackupModelName, readonly string[]> = 
   LearningRecord: ["id", "studentId", "kind", "entryDate", "title", "content", "note", "parentFacing", "sourceLessonId", "cohortId", "createdAt", "updatedAt"],
   TestResult: ["id", "studentId", "title", "testDate", "score", "maxScore", "percentage", "comment", "sourceLessonId", "cohortId", "createdAt", "updatedAt"],
   Attachment: ["id", "fileName", "mediaType", "externalUrl", "sizeBytes", "lessonId", "learningRecordId", "testResultId", "paymentId", "createdAt"],
-  Tag: ["id", "name"],
+  Tag: ["id", "name", "suggestionHiddenAt"],
   StudentTag: ["studentId", "tagId"],
   CohortTag: ["cohortId", "tagId"],
   LessonTag: ["lessonId", "tagId"],
+};
+
+const OPTIONAL_BACKUP_FIELDS: Partial<Record<BackupModelName, readonly string[]>> = {
+  Tag: ["suggestionHiddenAt"],
 };
 
 const ID_FIELDS: Record<BackupModelName, readonly string[]> = Object.fromEntries(BACKUP_MODEL_NAMES.map((name) => [name, ["id"]])) as unknown as Record<BackupModelName, readonly string[]>;
@@ -91,7 +95,8 @@ export function validateTutorFlowBackup(input: unknown): BackupValidationResult 
     for (const [index, candidate] of data[name].entries()) {
       if (!isObject(candidate)) return { ok: false, error: `${name}[${index}] имеет неверную структуру.` };
       const keys = Object.keys(candidate);
-      if (keys.some((key) => !allowed.has(key)) || BACKUP_SCALAR_FIELDS[name].some((key) => !(key in candidate))) return { ok: false, error: `${name}[${index}] не соответствует формату backup v1.` };
+      const optional = new Set(OPTIONAL_BACKUP_FIELDS[name] ?? []);
+      if (keys.some((key) => !allowed.has(key)) || BACKUP_SCALAR_FIELDS[name].some((key) => !optional.has(key) && !(key in candidate))) return { ok: false, error: `${name}[${index}] не соответствует формату backup v1.` };
       for (const key of ID_FIELDS[name]) if (typeof candidate[key] !== "string" || !candidate[key]) return { ok: false, error: `${name}[${index}].${key} должен содержать ID.` };
       const identity = ID_FIELDS[name].map((key) => candidate[key]).join("\u0000");
       if (identities.has(identity)) return { ok: false, error: `${name} содержит повторяющийся идентификатор.` };

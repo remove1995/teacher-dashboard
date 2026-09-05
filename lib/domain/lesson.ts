@@ -31,6 +31,10 @@ export function addStage(stages: PlanStage[], stage: Omit<PlanStage, "sortOrder"
   return [...stages, { ...stage, sortOrder: stages.length }];
 }
 
+export function parseStagePaste(value: string) {
+  return value.split(/\r?\n|\r/).map((line) => line.trim()).filter(Boolean);
+}
+
 export function editStage(stages: PlanStage[], stageId: string, text: string) {
   return stages.map((stage) => stage.id === stageId ? { ...stage, text } : stage);
 }

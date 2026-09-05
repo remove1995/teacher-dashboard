@@ -3,7 +3,7 @@
 import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
-import { copyLessonPlan, emptyLessonPlan, planningMonthRange, reorderStages } from "@/lib/domain/lesson";
+import { copyLessonPlan, emptyLessonPlan, parseStagePaste, planningMonthRange, reorderStages } from "@/lib/domain/lesson";
 import { dateOnly, timeToMinute } from "@/lib/domain/dates";
 import { attendanceAfterLessonCompletion, attendanceAfterUndoCompletion } from "@/lib/domain/attendance";
 import { getTeacherSettings } from "@/lib/settings";
@@ -169,6 +169,18 @@ export async function addLessonStage(lessonId: string, formData: FormData) {
   refreshLessons();
 }
 
+export async function addLessonStages(lessonId: string, pastedText: string) {
+  const texts = parseStagePaste(pastedText);
+  if (!texts.length) return;
+  await prisma.$transaction(async (tx) => {
+    const aggregate = await tx.lessonStage.aggregate({ where: { lessonId }, _max: { sortOrder: true } });
+    const firstSortOrder = (aggregate._max.sortOrder ?? -1) + 1;
+    await tx.lessonStage.createMany({ data: texts.map((text, index) => ({ lessonId, text, completed: false, sortOrder: firstSortOrder + index })) });
+    await tx.lesson.update({ where: { id: lessonId }, data: planned() });
+  });
+  refreshLessons();
+}
+
 export async function updateLessonStage(stageId: string, formData: FormData) {
   const text = required(formData, "text");
   const stage = await prisma.lessonStage.update({ where: { id: stageId }, data: { text }, select: { lessonId: true } });
@@ -218,6 +230,11 @@ export async function removeLessonTag(lessonId: string, tagId: string) {
     prisma.lessonTag.delete({ where: { lessonId_tagId: { lessonId, tagId } } }),
     prisma.lesson.update({ where: { id: lessonId }, data: planned() }),
   ]);
+  refreshLessons();
+}
+
+export async function hideTagSuggestion(tagId: string) {
+  await prisma.tag.update({ where: { id: tagId }, data: { suggestionHiddenAt: new Date() } });
   refreshLessons();
 }
 

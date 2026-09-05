@@ -429,11 +429,12 @@ model Attachment {
 }
 
 model Tag {
-  id       String       @id @default(cuid())
-  name     String       @unique
-  students StudentTag[]
-  cohorts  CohortTag[]
-  lessons  LessonTag[]
+  id                 String       @id @default(cuid())
+  name               String       @unique
+  suggestionHiddenAt DateTime?
+  students           StudentTag[]
+  cohorts            CohortTag[]
+  lessons            LessonTag[]
 }
 
 model StudentTag {

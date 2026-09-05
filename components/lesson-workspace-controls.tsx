@@ -2,8 +2,8 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
-import { addLessonStage, addLessonTag, clearLessonPlan, deleteLesson, materializeLesson, moveLessonOnMobile, deleteLessonStage, removeLessonTag, reorderLessonStages, toggleLessonStage, updateLessonDate, updateLessonField, updateLessonStage } from "@/app/actions/lessons";
-import { suggestDateInMonth } from "@/lib/domain/lesson";
+import { addLessonStage, addLessonStages, addLessonTag, clearLessonPlan, deleteLesson, hideTagSuggestion, materializeLesson, moveLessonOnMobile, deleteLessonStage, removeLessonTag, reorderLessonStages, toggleLessonStage, updateLessonDate, updateLessonField, updateLessonStage } from "@/app/actions/lessons";
+import { parseStagePaste, suggestDateInMonth } from "@/lib/domain/lesson";
 import { ShareActions } from "@/components/share-actions";
 
 export function ClearLessonPlanButton({ lessonId }: { lessonId: string }) {
@@ -103,13 +103,13 @@ export function StageEditor({ lessonId, initialStages }: { lessonId: string; ini
     <button className="stage-drag-handle" type="button" draggable aria-label="Перетащить этап" onDragStart={() => setDraggedId(stage.id)} onDragEnd={() => setDraggedId(null)}>⠿</button><input aria-label="Этап завершён" type="checkbox" checked={stage.completed} onChange={(event) => { const completed=event.target.checked; setStages((items) => items.map((item) => item.id===stage.id ? {...item,completed}:item)); refresh(() => toggleLessonStage(stage.id, completed)); }} />
     <StageNameField value={stage.text} onCommit={(text) => { setStages((items)=>items.map((item)=>item.id===stage.id?{...item,text}:item)); const data=new FormData();data.set("text",text);refresh(()=>updateLessonStage(stage.id,data)); }} />
     <button className="icon-button" type="button" aria-label="Удалить этап" onClick={() => { setStages((items)=>items.filter(({id})=>id!==stage.id)); refresh(()=>deleteLessonStage(stage.id)); }}>×</button>
-  </div>)}</div><form className="inline-add" action={(data) => { const text=String(data.get("text")??"").trim(); if(!text)return; refresh(()=>addLessonStage(lessonId,data)); (document.activeElement as HTMLElement | null)?.blur(); }}><input name="text" placeholder="Добавить этап" /><button type="submit">Добавить</button></form></section>;
+  </div>)}</div><form className="inline-add" action={(data) => { const text=String(data.get("text")??"").trim(); if(!text)return; refresh(()=>addLessonStage(lessonId,data)); (document.activeElement as HTMLElement | null)?.blur(); }}><input name="text" placeholder="Добавить этап" autoComplete="off" onPaste={(event) => { const pasted=event.clipboardData.getData("text"); if(parseStagePaste(pasted).length<2)return; event.preventDefault(); event.currentTarget.value=""; refresh(()=>addLessonStages(lessonId,pasted)); }} /><button type="submit">Добавить</button></form></section>;
 }
 
-export function TagEditor({ lessonId, tags, suggestions }: { lessonId: string; tags: Array<{ id: string; name: string }>; suggestions: string[] }) {
+export function TagEditor({ lessonId, tags, suggestions }: { lessonId: string; tags: Array<{ id: string; name: string }>; suggestions: Array<{ id: string; name: string }> }) {
   const router=useRouter(); const [pending,startTransition]=useTransition();
   const run=(task:()=>Promise<unknown>)=>startTransition(async()=>{await task();router.refresh();});
-  return <section className="lesson-panel-section"><div className="lesson-section-heading"><h3>Теги</h3>{pending?<span>Сохраняю…</span>:null}</div><div className="editable-tags">{tags.map((tag)=><span key={tag.id}>{tag.name}<button type="button" aria-label={`Удалить ${tag.name}`} onClick={()=>run(()=>removeLessonTag(lessonId,tag.id))}>×</button></span>)}</div><form className="inline-add compact" action={(data)=>run(()=>addLessonTag(lessonId,data))}><input name="name" list="lesson-tag-suggestions" placeholder="Добавить тег" required /><datalist id="lesson-tag-suggestions">{suggestions.map((name)=><option value={name} key={name}/>)}</datalist><button type="submit">+</button></form></section>;
+  return <section className="lesson-panel-section"><div className="lesson-section-heading"><h3>Теги</h3>{pending?<span>Сохраняю…</span>:null}</div><div className="editable-tags">{tags.map((tag)=><span key={tag.id}>{tag.name}<button type="button" aria-label={`Удалить ${tag.name}`} onClick={()=>run(()=>removeLessonTag(lessonId,tag.id))}>×</button></span>)}</div><form className="inline-add compact" action={(data)=>run(()=>addLessonTag(lessonId,data))}><input name="name" list="lesson-tag-suggestions" placeholder="Добавить тег" required /><datalist id="lesson-tag-suggestions">{suggestions.map(({id,name})=><option value={name} key={id}/>)}</datalist><button type="submit">+</button></form>{suggestions.length?<details className="tag-suggestion-manager"><summary>Настроить подсказки</summary><div>{suggestions.map((tag)=><button className="secondary-button" type="button" key={tag.id} disabled={pending} onClick={()=>{if(window.confirm(`Убрать тег «${tag.name}» из подсказок? В существующих записях он сохранится.`))run(()=>hideTagSuggestion(tag.id));}}>{tag.name}<span aria-hidden="true">×</span></button>)}</div></details>:null}</section>;
 }
 
 export function LessonColorPicker({ lessonId, value, entityColor }: { lessonId: string; value: string | null; entityColor: string }) {

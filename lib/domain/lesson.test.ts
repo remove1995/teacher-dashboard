@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { addPlanningMonth, addStage, adjacentPlanningMonth, aggregateAttendance, applyManualLessonDate, attendanceAfterCompletion, canUpdateGeneratedLesson, chooseNextGeneratedOccurrence, completionTransition, copyLessonPlan, defaultLessonDate, deleteStage, editStage, emptyLessonPlan, findKanbanContainer, groupLessonIdsByMonth, homeworkState, horizontalMonthSwipe, isKanbanLesson, lessonBelongsToWorkspace, lessonMatchesSearch, lessonMatchesTags, materializationMode, moveKanbanCard, moveLessonDate, orderLessonMonths, planningMonthRange, removePlanningMonth, reorderStages, selectedMonthAfterRemoval, sortKanbanLessons, suggestDateInMonth, undoCompletion } from "./lesson";
+import { addPlanningMonth, addStage, adjacentPlanningMonth, aggregateAttendance, applyManualLessonDate, attendanceAfterCompletion, canUpdateGeneratedLesson, chooseNextGeneratedOccurrence, completionTransition, copyLessonPlan, defaultLessonDate, deleteStage, editStage, emptyLessonPlan, findKanbanContainer, groupLessonIdsByMonth, homeworkState, horizontalMonthSwipe, isKanbanLesson, lessonBelongsToWorkspace, lessonMatchesSearch, lessonMatchesTags, materializationMode, moveKanbanCard, moveLessonDate, orderLessonMonths, parseStagePaste, planningMonthRange, removePlanningMonth, reorderStages, selectedMonthAfterRemoval, sortKanbanLessons, suggestDateInMonth, undoCompletion } from "./lesson";
 
 describe("lesson rules", () => {
+  it("parses multi-line stage paste, trims values, ignores empty lines and preserves order", () => {
+    expect(parseStagePaste("  Warm-up  \n\n Check homework\r\nVocabulary revision \r Grammar practice"))
+      .toEqual(["Warm-up", "Check homework", "Vocabulary revision", "Grammar practice"]);
+  });
+  it("keeps single-line paste ordinary and does not deduplicate stages", () => {
+    expect(parseStagePaste("  Speaking practice  ")).toEqual(["Speaking practice"]);
+    expect(parseStagePaste("Review\nReview")).toEqual(["Review", "Review"]);
+  });
+  it("allows pasted stages to append without replacing existing stages", () => {
+    expect(["Introduction", ...parseStagePaste("Practice\nWrap-up")]).toEqual(["Introduction", "Practice", "Wrap-up"]);
+  });
   it("derives missing homework only for completed lessons", () => { expect(homeworkState({ status: "COMPLETED", homeworkText: " " }).needsHomeworkAttention).toBe(true); expect(homeworkState({ status: "PLANNED", homeworkText: null }).needsHomeworkAttention).toBe(false); });
   it("preserves past and manually edited generated lessons", () => { const today = new Date("2026-08-10"); expect(canUpdateGeneratedLesson({ scheduledDate: new Date("2026-08-11"), manuallyEdited: false }, today)).toBe(true); expect(canUpdateGeneratedLesson({ scheduledDate: new Date("2026-08-11"), manuallyEdited: true }, today)).toBe(false); expect(canUpdateGeneratedLesson({ scheduledDate: new Date("2026-08-09"), manuallyEdited: false }, today)).toBe(false); });
   it("only auto-marks individual attendance", () => { expect(attendanceAfterCompletion("INDIVIDUAL")).toBe("PRESENT"); expect(attendanceAfterCompletion("COHORT")).toBeNull(); });

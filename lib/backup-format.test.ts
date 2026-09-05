@@ -6,6 +6,11 @@ export const validEmptyBackup = () => ({ format: "tutorflow-backup" as const, ve
 
 describe("TutorFlow backup v1 validation", () => {
   it("accepts a valid v1 backup", () => expect(validateTutorFlowBackup(validEmptyBackup()).ok).toBe(true));
+  it("accepts legacy v1 tags without suggestion visibility metadata", () => {
+    const backup = validEmptyBackup();
+    backup.data.Tag.push({ id: "tag-1", name: "Speaking" });
+    expect(validateTutorFlowBackup(backup).ok).toBe(true);
+  });
   it("rejects invalid JSON", () => expect(parseTutorFlowBackupJson("{broken")).toEqual({ ok: false, error: "Не удалось прочитать JSON-файл." }));
   it("rejects a wrong format", () => expect(validateTutorFlowBackup({ ...validEmptyBackup(), format: "other" }).ok).toBe(false));
   it("rejects an unsupported version", () => expect(validateTutorFlowBackup({ ...validEmptyBackup(), version: 2 }).ok).toBe(false));
