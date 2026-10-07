@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
-import { cancelOccurrenceRecord, createSchedule, generateLessonsForSchedule, removeOccurrence, replaceFutureSchedule, rescheduleOccurrence, ScheduleDomainError } from "./schedule-service";
+import { cancelOccurrenceRecord, createSchedule, generateLessonsForSchedule, removeOccurrence, replaceFutureSchedule, rescheduleOccurrence, ScheduleDomainError, updateOccurrenceSchedule } from "./schedule-service";
 import { permanentlyDeleteStudentRecord } from "./student-lifecycle-service";
 
 const prisma = new PrismaClient();
@@ -54,12 +54,56 @@ describe("calendar occurrence persistence", () => {
     } finally { await permanentlyDeleteStudentRecord(prisma,student.id); }
   });
 
+  it("moves a past lesson to another past date/time in place and preserves its plan and attendance", async () => {
+    const { student, lesson } = await fixture("2020-01-01");
+    try {
+      await prisma.lesson.update({ where: { id: lesson.id }, data: { homeworkText: "Не потерять", stages: { create: { text: "Warm-up", sortOrder: 0 } } } });
+      await prisma.$transaction((tx) => updateOccurrenceSchedule(tx, lesson.id, { date: "2020-01-03", startMinute: 1110, durationMinutes: 75 }));
+      const updated = await prisma.lesson.findUniqueOrThrow({ where: { id: lesson.id }, include: { stages: true, attendance: true } });
+      expect(updated).toMatchObject({ id: lesson.id, scheduledDate: date("2020-01-03"), startMinute: 1110, durationMinutes: 75, manuallyEdited: true, homeworkText: "Не потерять" });
+      expect(updated.stages).toHaveLength(1);
+      expect(updated.attendance).toHaveLength(1);
+      expect(await prisma.lesson.count({ where: { studentId: student.id } })).toBe(1);
+    } finally { await permanentlyDeleteStudentRecord(prisma,student.id); }
+  });
+
+  it("corrects the date and time of a completed historical lesson without changing its status", async () => {
+    const { student, lesson } = await fixture("2020-01-01", "COMPLETED");
+    try {
+      await prisma.$transaction((tx) => updateOccurrenceSchedule(tx, lesson.id, { date: "2020-01-02", startMinute: 900, durationMinutes: 45 }));
+      expect(await prisma.lesson.findUnique({ where: { id: lesson.id }, select: { scheduledDate: true, startMinute: true, durationMinutes: true, status: true, completedAt: true, manuallyEdited: true } })).toMatchObject({ scheduledDate: date("2020-01-02"), startMinute: 900, durationMinutes: 45, status: "COMPLETED", manuallyEdited: true });
+    } finally { await permanentlyDeleteStudentRecord(prisma,student.id); }
+  });
+
   it.each([["future", "2099-09-01"], ["past empty", "2020-01-01"]])("reschedules a %s PLANNED occurrence to the future", async (_label, lessonDate) => {
     const { student, lesson } = await fixture(lessonDate);
     try {
       const replacement = await prisma.$transaction((tx) => rescheduleOccurrence(tx,lesson.id,{ date: future, startMinute: 1020, durationMinutes: 60 }));
       expect(replacement.originalLessonId).toBe(lesson.id);
       expect(await prisma.lesson.findUnique({ where: { id: lesson.id }, select: { status: true } })).toEqual({ status: "RESCHEDULED" });
+    } finally { await permanentlyDeleteStudentRecord(prisma,student.id); }
+  });
+
+  it("reschedules a past occurrence to another past date and updates the same replacement on repeat", async () => {
+    const { student, lesson } = await fixture("2020-01-01");
+    try {
+      const replacement = await prisma.$transaction((tx) => rescheduleOccurrence(tx,lesson.id,{ date: "2020-01-03", startMinute: 1020, durationMinutes: 60 }));
+      const repeated = await prisma.$transaction((tx) => rescheduleOccurrence(tx,lesson.id,{ date: "2020-01-04", startMinute: 1080, durationMinutes: 75 }));
+      expect(repeated.id).toBe(replacement.id);
+      expect(repeated).toMatchObject({ originalLessonId: lesson.id, scheduledDate: date("2020-01-04"), startMinute: 1080, durationMinutes: 75 });
+      expect(await prisma.lesson.count({ where: { originalLessonId: lesson.id } })).toBe(1);
+      expect(await prisma.lesson.findUnique({ where: { id: lesson.id }, select: { status: true } })).toEqual({ status: "RESCHEDULED" });
+    } finally { await permanentlyDeleteStudentRecord(prisma,student.id); }
+  });
+
+  it("does not duplicate generated occurrences when materialisation runs again", async () => {
+    const student = await prisma.student.create({ data: { name: `Idempotent schedule ${crypto.randomUUID()}`, color: "#83916f" } });
+    try {
+      const created = await prisma.$transaction((tx) => createSchedule(tx,{ studentId: student.id, effectiveFrom: "2099-09-01", effectiveTo: "2099-09-15", timezone: "Europe/Moscow", slots: [{ weekday: 1, startMinute: 960, durationMinutes: 60 }] }));
+      const before = await prisma.lesson.count({ where: { recurringScheduleId: created.schedule.id } });
+      await generateLessonsForSchedule(prisma, created.schedule.id);
+      await generateLessonsForSchedule(prisma, created.schedule.id);
+      expect(await prisma.lesson.count({ where: { recurringScheduleId: created.schedule.id } })).toBe(before);
     } finally { await permanentlyDeleteStudentRecord(prisma,student.id); }
   });
 

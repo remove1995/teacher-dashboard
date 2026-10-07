@@ -47,7 +47,7 @@ export function isEmptyPlannedOccurrence(lesson: LessonOccurrenceSnapshot) {
   return emptyOccurrenceReasons(lesson).length === 0;
 }
 
-export function canRescheduleOccurrence(lesson: LessonOccurrenceSnapshot, isPast: boolean) {
+export function canRescheduleOccurrence(lesson: LessonOccurrenceSnapshot, _isPast: boolean) {
   if (lesson.status !== "PLANNED") return false;
-  return !isPast || isEmptyPlannedOccurrence(lesson);
+  return true;
 }

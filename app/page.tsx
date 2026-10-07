@@ -3,10 +3,13 @@ import { PagePlaceholder } from "@/components/page-placeholder";
 import { prisma } from "@/lib/db/prisma";
 import { dateOnly, minuteToTime, todayDate } from "@/lib/domain/dates";
 import { getTeacherSettings } from "@/lib/settings";
+import { getFinanceWorkspace, monthPeriod } from "@/lib/services/finance-service";
+import { homeworkState } from "@/lib/domain/lesson";
 
 export const dynamic = "force-dynamic";
 
 const rubles = (minor: number) => new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(minor / 100);
+const lessonHref = (lesson: { id: string; studentId: string | null; cohortId: string | null; scheduledDate: Date }) => `/lessons?${new URLSearchParams({ entity: lesson.studentId ? `student:${lesson.studentId}` : `cohort:${lesson.cohortId}`, lesson: lesson.id, focusMonth: lesson.scheduledDate.toISOString().slice(0, 7) })}`;
 
 function KpiIcon({ kind }: { kind: "today" | "week" | "payments" }) {
   const common = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -21,19 +24,19 @@ export default async function DashboardPage() {
   const weekStart = new Date(todayStart); weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
   const weekEnd = new Date(weekStart); weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
   const monthStart = new Date(Date.UTC(todayStart.getUTCFullYear(), todayStart.getUTCMonth(), 1));
-  const monthEnd = new Date(Date.UTC(todayStart.getUTCFullYear(), todayStart.getUTCMonth() + 1, 1));
-  const [todayLessons, weekLessons, upcomingLessons, payments, missingHomework] = await Promise.all([
+  const period = monthPeriod(todayStart.toISOString().slice(0, 7));
+  const [todayLessons, weekLessons, upcomingLessons, completedLessons, finance] = await Promise.all([
     prisma.lesson.findMany({ where: { scheduledDate: todayStart, status: { in: ["PLANNED", "COMPLETED"] } }, orderBy: { startMinute: "asc" } }),
     prisma.lesson.findMany({ where: { scheduledDate: { gte: weekStart, lt: weekEnd }, status: { in: ["PLANNED", "COMPLETED"] } }, select: { status: true } }),
     prisma.lesson.findMany({ where: { scheduledDate: { gte: todayStart }, status: "PLANNED" }, orderBy: [{ scheduledDate: "asc" }, { startMinute: "asc" }], take: 5, include: { student: { select: { name: true, color: true } }, cohort: { select: { name: true, color: true } } } }),
-    prisma.payment.findMany({ where: { OR: [{ paymentDate: { gte: monthStart, lt: monthEnd } }, { periodStart: { lt: monthEnd }, periodEnd: { gte: monthStart } }] } }),
-    prisma.lesson.count({ where: { status: "COMPLETED", OR: [{ homeworkText: null }, { homeworkText: "" }] } }),
+    prisma.lesson.findMany({ where: { status: "COMPLETED" }, orderBy: [{ scheduledDate: "desc" }, { startMinute: "desc" }], include: { student: { select: { name: true } }, cohort: { select: { name: true } } } }),
+    getFinanceWorkspace(period),
   ]);
-  const received = payments.reduce((sum, payment) => payment.paymentDate && payment.paymentDate >= monthStart && payment.paymentDate < monthEnd ? sum + payment.actualAmountMinor : sum, 0);
-  const expected = payments.reduce((sum, payment) => sum + Math.max(0, payment.suggestedAmountMinor - payment.actualAmountMinor), 0);
-  const partialCount = payments.filter(({ status }) => status === "PARTIALLY_PAID").length;
-  const overdueCount = payments.filter(({ status }) => status === "OVERDUE").length;
-  const attentionCount = missingHomework + partialCount + overdueCount;
+  const received = finance.summary.receivedMinor;
+  const expected = finance.summary.outstandingMinor;
+  const missingHomework = completedLessons.filter((lesson) => homeworkState(lesson).needsHomeworkAttention);
+  const partialPayments = finance.rows.filter((row) => row.status === "PARTIALLY_PAID" && row.balanceMinor < 0);
+  const attentionCount = missingHomework.length + partialPayments.length;
   const monthLabel = new Intl.DateTimeFormat("ru-RU", { month: "long", timeZone: "UTC" }).format(monthStart);
   const next = todayLessons.find(({ status }) => status === "PLANNED");
 
@@ -44,8 +47,8 @@ export default async function DashboardPage() {
       <article className="summary-card"><div className="kpi-icon"><KpiIcon kind="payments" /></div><div className="kpi-copy"><span>Получено в {monthLabel}</span><strong>{rubles(received)}</strong><small>{expected ? `Ожидается ещё ${rubles(expected)}` : "Ожидаемых оплат нет"}</small></div></article>
     </section>
     <section className="content-grid">
-      <article className="panel dashboard-lessons-panel"><div className="panel-heading"><h2>Ближайшие уроки</h2><Link href="/lessons">Все уроки →</Link></div>{upcomingLessons.length ? <ul className="dashboard-lesson-list">{upcomingLessons.map((lesson) => <li key={lesson.id}><time>{lesson.scheduledDate.toLocaleDateString("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" })}<br />{minuteToTime(lesson.startMinute)}</time><i style={{ background: lesson.student?.color ?? lesson.cohort?.color }} /><div><strong>{lesson.student?.name ?? lesson.cohort?.name}</strong><small>{lesson.title || "Тема пока не добавлена"}</small></div></li>)}</ul> : <div className="dashboard-empty"><span className="dashboard-empty-icon" aria-hidden="true">○</span><p>Ближайших уроков пока нет.</p><Link href="/students">Добавить ученика →</Link></div>}</article>
-      <article className="panel dashboard-attention-panel decorated-panel"><div className="panel-heading"><div className="attention-title"><span className="panel-icon" aria-hidden="true">!</span><h2>Требует внимания</h2></div><strong className="attention-count">{attentionCount}</strong></div>{attentionCount ? <ul className="attention-list">{missingHomework > 0 && <li>Добавить домашнее задание · {missingHomework}</li>}{partialCount > 0 && <li>Проверить частичные оплаты · {partialCount}</li>}{overdueCount > 0 && <li>Проверить просроченные оплаты · {overdueCount}</li>}</ul> : <div className="dashboard-empty"><span className="dashboard-empty-icon is-success" aria-hidden="true">✓</span><p>Сейчас всё в порядке.</p></div>}<img className="panel-decoration dashboard-attention-decoration" src="/assets/decor-branch-peach.png" alt="" aria-hidden="true" /></article>
+      <article className="panel dashboard-lessons-panel"><div className="panel-heading"><h2>Ближайшие уроки</h2><Link href="/lessons">Все уроки →</Link></div>{upcomingLessons.length ? <ul className="dashboard-lesson-list">{upcomingLessons.map((lesson) => <li key={lesson.id}><time>{lesson.scheduledDate.toLocaleDateString("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" })}<br />{minuteToTime(lesson.startMinute)}</time><i style={{ background: lesson.student?.color ?? lesson.cohort?.color }} /><div><strong><Link href={lesson.studentId ? `/students/${lesson.studentId}` : `/cohorts/${lesson.cohortId}`}>{lesson.student?.name ?? lesson.cohort?.name}</Link></strong><small><Link href={lessonHref(lesson)}>{lesson.title || "Тема пока не добавлена"}</Link></small></div></li>)}</ul> : <div className="dashboard-empty"><span className="dashboard-empty-icon" aria-hidden="true">○</span><p>Ближайших уроков пока нет.</p><Link href="/students">Добавить ученика →</Link></div>}</article>
+      <article className="panel dashboard-attention-panel decorated-panel"><div className="panel-heading"><div className="attention-title"><span className="panel-icon" aria-hidden="true">!</span><h2>Требует внимания</h2></div><strong className="attention-count">{attentionCount}</strong></div>{attentionCount ? <div className="dashboard-attention-groups">{missingHomework.length > 0 && <section><h3>Добавить домашнее задание</h3><ul className="attention-list">{missingHomework.map((lesson) => <li key={lesson.id}><Link href={lessonHref(lesson)}>{lesson.student?.name ?? lesson.cohort?.name} · {lesson.scheduledDate.toLocaleDateString("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" })}, {minuteToTime(lesson.startMinute)}</Link></li>)}</ul></section>}{partialPayments.length > 0 && <section><h3>Частичные оплаты</h3><ul className="attention-list">{partialPayments.map((row) => <li key={row.id}><Link href={`/payments?${new URLSearchParams({ month: period.key, kind: row.kind, q: row.name })}`}>{row.name} · осталось {rubles(-row.balanceMinor)}</Link></li>)}</ul></section>}</div> : <div className="dashboard-empty"><span className="dashboard-empty-icon is-success" aria-hidden="true">✓</span><p>Сейчас всё в порядке.</p></div>}<img className="panel-decoration dashboard-attention-decoration" src="/assets/decor-branch-peach.png" alt="" aria-hidden="true" /></article>
     </section>
   </PagePlaceholder>;
 }

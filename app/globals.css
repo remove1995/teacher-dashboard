@@ -1324,3 +1324,27 @@ main .page-stack small{font-size:var(--font-size-secondary);line-height:1.45}
 
 /* Calendar action feedback */
 .calendar-action-error,.form-error{margin:0;padding:9px 11px;border:1px solid rgba(164,63,54,.2);border-radius:9px;background:rgba(248,231,229,.68);color:#8f3932;font-size:13px;line-height:1.4}.calendar-destructive-actions{display:grid;gap:8px}.calendar-destructive-actions form{padding:0;border:0;background:transparent}.calendar-destructive-actions button{width:100%}.calendar-remove-button{border:1px solid var(--color-border);background:transparent;color:var(--color-text-secondary)}
+
+/* Calendar event content: preserve time and identity before optional topic. */
+.calendar-week-desktop .calendar-event{grid-template-rows:auto auto minmax(0,auto);row-gap:3px;padding:7px 8px}
+.calendar-week-desktop .calendar-event-time{font-size:12px;font-weight:600;line-height:1.15}
+.calendar-week-desktop .calendar-event strong{display:-webkit-box;font-size:13px;font-weight:600;line-height:1.22;white-space:normal;word-break:normal;overflow-wrap:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.calendar-week-desktop .calendar-event small{font-size:12px;line-height:1.2}
+.calendar-week-desktop .calendar-event.is-short small{display:none}
+@container(max-width:92px){.calendar-week-desktop .calendar-event{padding:6px 5px}.calendar-week-desktop .calendar-event-time{font-size:11px}.calendar-week-desktop .calendar-event-time i{display:none}.calendar-week-desktop .calendar-event strong{display:-webkit-box;font-size:12px;line-height:1.18;white-space:normal;text-overflow:clip;-webkit-box-orient:vertical;-webkit-line-clamp:2}.calendar-week-desktop .calendar-event.is-overlap small{display:none}}
+
+.finance-summary article>small{color:var(--color-text-muted);font-size:13px;line-height:1.35}
+
+/* Working finance KPIs and actionable Dashboard links. */
+.finance-working-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+.finance-working-summary article.finance-kpi-received{background:var(--surface-finance-received)}
+.finance-working-summary article.finance-kpi-expected{background:var(--surface-finance-expected)}
+.finance-working-summary article.finance-kpi-credits{background:var(--surface-finance-credits)}
+.dashboard-lesson-list a{color:inherit}
+.dashboard-lesson-list a:hover,.dashboard-attention-groups a:hover{text-decoration:underline;text-underline-offset:3px}
+.dashboard-lesson-list a:focus-visible,.dashboard-attention-groups a:focus-visible{outline:2px solid var(--color-primary);outline-offset:3px;border-radius:3px;text-decoration:underline}
+.dashboard-attention-groups{display:grid;gap:var(--space-md);margin-top:var(--space-md)}
+.dashboard-attention-groups h3{margin:0;color:var(--color-text-secondary);font-family:var(--font-ui);font-size:14px;font-weight:500}
+.dashboard-attention-groups .attention-list{margin:8px 0 0}
+.dashboard-attention-groups a{display:block;color:inherit;overflow-wrap:anywhere}
+@media(max-width:760px){.finance-working-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-working-summary article:last-child{grid-column:1/-1}}

@@ -1,7 +1,7 @@
-import type { BillingModel, CohortKind, LessonStatus } from "@prisma/client";
+import type { BillingModel, CohortKind } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import {
-  cumulativeReceived, earnedIncome, expectedForPaymentPeriod, paymentStatus,
+  billableLessonServices, cashReceivedInPeriod, cumulativeReceived, earnedIncome, expectedForBillablePeriod, expectedForPerLessonPeriod, paymentStatus,
   resolveEffectiveRate, resolveProfileForPeriod, suggestPayment, type DerivedPaymentStatus, type FinanceEntityKind,
 } from "@/lib/domain/money";
 import { contextActiveInPeriod } from "@/lib/domain/people";
@@ -15,7 +15,7 @@ export type FinancePayment = {
 export type FinanceParticipant = {
   key: string; studentId: string; cohortId: string | null; billingProfileId: string; name: string; contextName: string;
   kind: FinanceEntityKind; billingModel: BillingModel; unitAmountMinor: number;
-  expectedMinor: number; receivedMinor: number; balanceMinor: number; creditMinor: number;
+  expectedMinor: number; receivedMinor: number; suggestedPaymentMinor: number; balanceMinor: number; creditMinor: number;
   status: DerivedPaymentStatus; calculationNote: string; lessonCount: number | null;
   creditAppliedMinor: number; trialPaidMinor: number; trialCreditMinor: number;
   lastPaymentDate: string | null; receiptUrl: string | null; payments: FinancePayment[];
@@ -41,15 +41,6 @@ export function shiftMonth(period: FinancePeriod, amount: number) {
   return iso(new Date(Date.UTC(period.start.getUTCFullYear(), period.start.getUTCMonth() + amount, 1))).slice(0, 7);
 }
 
-function distinctServices(lessons: Array<{ id: string; originalLessonId: string | null; status: LessonStatus }>, completedOnly: boolean) {
-  const ids = new Set<string>();
-  for (const lesson of lessons) {
-    if (completedOnly ? lesson.status !== "COMPLETED" : lesson.status === "CANCELLED" || lesson.status === "RESCHEDULED") continue;
-    ids.add(lesson.originalLessonId ?? lesson.id);
-  }
-  return ids.size;
-}
-
 function aggregateStatus(statuses: DerivedPaymentStatus[]): DerivedPaymentStatus {
   if (statuses.some((status) => status === "OVERPAID")) return "OVERPAID";
   if (statuses.every((status) => status === "PAID")) return "PAID";
@@ -73,7 +64,7 @@ export async function getFinanceWorkspace(period: FinancePeriod) {
     }),
     prisma.credit.findMany({ where: { status: { in: ["AVAILABLE", "APPLIED"] } }, select: { studentId: true, amountMinor: true, status: true, sourcePaymentId: true, destinationPaymentId: true, destinationPeriodLabel: true, sourcePayment: { select: { cohortId: true } } } }),
     prisma.payment.findMany({
-      where: { periodStart: { lte: period.end }, periodEnd: { gte: period.start } }, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
     }),
   ]);
 
@@ -84,8 +75,8 @@ export async function getFinanceWorkspace(period: FinancePeriod) {
     const contextFrom = membership && membership.activeFrom > profile.effectiveFrom ? membership.activeFrom : profile.effectiveFrom;
     const contextTo = membership?.activeTo && (!profile.effectiveTo || membership.activeTo < profile.effectiveTo) ? membership.activeTo : profile.effectiveTo;
     const relevantLessons = lessons.filter((lesson) => (cohort ? lesson.cohortId === cohort.id : lesson.studentId === student.id) && lesson.scheduledDate >= contextFrom && (!contextTo || lesson.scheduledDate <= contextTo) && (!membership || memberAttendsOccurrence(membership, lesson.scheduledDate)));
-    const scheduledLessonCount = distinctServices(relevantLessons, false);
-    const completedLessonCount = distinctServices(relevantLessons, true);
+    const scheduledLessonCount = billableLessonServices(relevantLessons).length;
+    const completedLessonCount = billableLessonServices(relevantLessons, true).length;
     const creditMinor = credits
       .filter((credit) => credit.studentId === student.id && credit.status === "AVAILABLE" && (!credit.destinationPeriodLabel || credit.destinationPeriodLabel === period.label) && (!credit.sourcePaymentId || credit.sourcePayment?.cohortId === (cohort?.id ?? null)))
       .reduce((sum, credit) => sum + credit.amountMinor, 0);
@@ -97,20 +88,30 @@ export async function getFinanceWorkspace(period: FinancePeriod) {
       availableCreditMinor: creditMinor,
     });
     const contextPayments = payments.filter((payment) => payment.studentId === student.id && payment.cohortId === (cohort?.id ?? null));
-    const relevantPayments = contextPayments.filter((payment) => payment.billingModel === profile.model);
+    const periodPayments = contextPayments.filter((payment) => payment.periodStart <= period.end && payment.periodEnd >= period.start);
+    const relevantPayments = periodPayments.filter((payment) => payment.billingModel === profile.model);
+    const receivedPayments = contextPayments.filter((payment) => payment.billingModel === profile.model);
     const trialPaidMinor = membership ? cumulativeReceived(contextPayments.filter((payment) => payment.billingModel === "PAY_PER_LESSON" && (!membership.regularFrom || payment.periodStart < membership.regularFrom))) : 0;
     const relevantPaymentIds = new Set(relevantPayments.map(({ id }) => id));
+    // Corrections do not undo credits allocated to earlier payment versions.
+    const appliedCreditMinor = credits.filter((credit) => credit.studentId === student.id && credit.status === "APPLIED" && credit.destinationPaymentId && relevantPaymentIds.has(credit.destinationPaymentId)).reduce((sum, credit) => sum + credit.amountMinor, 0);
     const trialCreditMinor = membership ? credits.filter((credit) => credit.sourcePaymentId && credit.sourcePayment?.cohortId === cohort?.id && ((credit.status === "AVAILABLE" && (!credit.destinationPeriodLabel || credit.destinationPeriodLabel === period.label)) || (credit.status === "APPLIED" && credit.destinationPaymentId && relevantPaymentIds.has(credit.destinationPaymentId)))).reduce((sum, credit) => sum + credit.amountMinor, 0) : 0;
-    const expectedMinor = expectedForPaymentPeriod(relevantPayments, suggestion.amountMinor);
-    const receivedMinor = cumulativeReceived(relevantPayments);
+    const expectedMinor = profile.model === "PAY_PER_LESSON"
+      ? expectedForPerLessonPeriod(relevantPayments, suggestion.amountMinor)
+      : expectedForBillablePeriod(relevantPayments, Math.max(0, suggestion.amountMinor - appliedCreditMinor));
+    const receivedMinor = cashReceivedInPeriod(receivedPayments, period.start, period.end);
     const currentIds = new Set(relevantPayments.map((payment) => payment.correctsPaymentId).filter(Boolean));
     const currentPayments = relevantPayments.filter((payment) => !currentIds.has(payment.id));
     return {
       key: `${student.id}:${cohort?.id ?? "individual"}`, studentId: student.id, cohortId: cohort?.id ?? null, billingProfileId: profile.id,
       name: student.name, contextName: cohort?.name ?? "Индивидуально", kind: cohort?.kind ?? "INDIVIDUAL",
       billingModel: profile.model, unitAmountMinor: profile.amountMinor, expectedMinor, receivedMinor,
+      suggestedPaymentMinor: Math.max(0, expectedMinor - receivedMinor),
       balanceMinor: receivedMinor - expectedMinor, creditMinor, status: paymentStatus(expectedMinor, receivedMinor),
-      calculationNote: suggestion.explanation, lessonCount: suggestion.lessonCount,
+      calculationNote: profile.model === "PAY_PER_LESSON" && expectedMinor > suggestion.amountMinor
+        ? `Разовые начисления и оплаты за период: ${new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(expectedMinor / 100)}`
+        : suggestion.explanation,
+      lessonCount: suggestion.lessonCount,
       creditAppliedMinor: suggestion.creditAppliedMinor, trialPaidMinor, trialCreditMinor,
       lastPaymentDate: currentPayments.find((payment) => payment.paymentDate)?.paymentDate ? iso(currentPayments.find((payment) => payment.paymentDate)!.paymentDate!) : null,
       receiptUrl: currentPayments.find((payment) => payment.receiptUrl)?.receiptUrl ?? null,
@@ -135,12 +136,11 @@ export async function getFinanceWorkspace(period: FinancePeriod) {
     rows.push({ id: `cohort:${cohort.id}`, name: cohort.name, searchText: `${cohort.name} ${members.map((member) => member.name).join(" ")}`, kind: cohort.kind, color: cohort.color, participants: members, expectedMinor, receivedMinor, balanceMinor: receivedMinor - expectedMinor, status: aggregateStatus(members.map((item) => item.status)) });
   }
 
-  const allPaymentVersions = await prisma.payment.findMany();
+  const allPaymentVersions = payments;
   const currentPaymentIds = new Set(allPaymentVersions.map((payment) => payment.correctsPaymentId).filter(Boolean));
-  const receivedMinor = cumulativeReceived(allPaymentVersions.filter((payment) => !currentPaymentIds.has(payment.id) && payment.paymentDate && payment.paymentDate >= period.start && payment.paymentDate <= period.end));
+  const receivedMinor = cashReceivedInPeriod(allPaymentVersions.filter((payment) => !currentPaymentIds.has(payment.id)), period.start, period.end);
   let earnedMinor = 0;
-  for (const lesson of lessons) {
-    if (lesson.status !== "COMPLETED") continue;
+  for (const lesson of billableLessonServices(lessons, true)) {
     if (lesson.studentId) {
       const student = students.find((item) => item.id === lesson.studentId);
       const profile = student && resolveEffectiveRate(student.billingProfiles.filter((item) => item.cohortId === null), lesson.scheduledDate);
@@ -148,7 +148,7 @@ export async function getFinanceWorkspace(period: FinancePeriod) {
     } else if (lesson.cohortId) {
       const cohort = cohorts.find((item) => item.id === lesson.cohortId);
       if (!cohort) continue;
-      const scheduledCount = Math.max(1, distinctServices(lessons.filter((item) => item.cohortId === cohort.id), false));
+      const scheduledCount = Math.max(1, billableLessonServices(lessons.filter((item) => item.cohortId === cohort.id)).length);
       for (const membership of cohort.memberships.filter((item) => contextActiveInPeriod(item.activeFrom, item.activeTo, period.start, period.end) && memberAttendsOccurrence(item, lesson.scheduledDate))) {
         const profile = resolveEffectiveRate(membership.billingProfiles.length ? membership.billingProfiles : membership.student.billingProfiles.filter((item) => item.cohortId === cohort.id), lesson.scheduledDate);
         if (!profile) continue;

@@ -139,33 +139,55 @@ export async function replaceFutureSchedule(db: Db, scheduleId: string, changeFr
 
 export async function rescheduleOccurrence(db: Db, lessonId: string, replacement: { date: string; startMinute: number; durationMinutes: number }) {
   const lesson = await findOccurrence(db, lessonId);
+  const linkedOriginal = lesson.originalLessonId ? await findOccurrence(db, lesson.originalLessonId) : null;
+  const original = linkedOriginal ?? lesson;
+  const existingReplacement = linkedOriginal
+    ? lesson
+    : lesson.replacementLesson?.id
+      ? await findOccurrence(db, lesson.replacementLesson.id)
+      : null;
   const today = todayDate(lesson.recurringSchedule?.timezone);
-  const isPast = toDateInput(lesson.scheduledDate) < today;
-  if (!canRescheduleOccurrence(occurrenceSnapshot(lesson), isPast)) throw new ScheduleDomainError(isPast ? "Прошедший урок с историей нельзя перенести." : "Перенести можно только запланированное занятие.");
-  if (replacement.date < today) throw new ScheduleDomainError("Новое занятие нельзя переносить в прошлое.");
-  const target: ScheduleTarget = lesson.studentId ? { studentId: lesson.studentId } : { cohortId: lesson.cohortId! };
-  if (lesson.recurringScheduleId) {
-    const sourceDate = sourceOccurrenceDate(lesson.generationKey) ?? toDateInput(lesson.scheduledDate);
-    await db.scheduleException.deleteMany({ where: { scheduleId: lesson.recurringScheduleId, occurrenceDate: dateOnly(sourceDate) } });
-    await db.scheduleException.create({ data: { scheduleId: lesson.recurringScheduleId, occurrenceDate: dateOnly(sourceDate), kind: "OCCURRENCE_OVERRIDE", replacementDate: dateOnly(replacement.date), replacementStartMinute: replacement.startMinute, replacementDurationMinutes: replacement.durationMinutes } });
+  const isPast = toDateInput(original.scheduledDate) < today;
+  if (!existingReplacement && !canRescheduleOccurrence(occurrenceSnapshot(original), isPast)) throw new ScheduleDomainError("Перенести можно только запланированное занятие.");
+  if (existingReplacement && existingReplacement.status !== "PLANNED") throw new ScheduleDomainError("Завершённую или отменённую замену нельзя переносить повторно.");
+  const target: ScheduleTarget = original.studentId ? { studentId: original.studentId } : { cohortId: original.cohortId! };
+  if (original.recurringScheduleId) {
+    const sourceDate = sourceOccurrenceDate(original.generationKey) ?? toDateInput(original.scheduledDate);
+    await db.scheduleException.deleteMany({ where: { scheduleId: original.recurringScheduleId, occurrenceDate: dateOnly(sourceDate) } });
+    await db.scheduleException.create({ data: { scheduleId: original.recurringScheduleId, occurrenceDate: dateOnly(sourceDate), kind: "OCCURRENCE_OVERRIDE", replacementDate: dateOnly(replacement.date), replacementStartMinute: replacement.startMinute, replacementDurationMinutes: replacement.durationMinutes } });
   }
-  await db.attendance.updateMany({ where: { lessonId }, data: { status: "RESCHEDULED" } });
-  await db.lesson.update({ where: { id: lessonId }, data: { status: "RESCHEDULED", manuallyEdited: true } });
+  if (existingReplacement) {
+    return db.lesson.update({ where: { id: existingReplacement.id }, data: { scheduledDate: dateOnly(replacement.date), startMinute: replacement.startMinute, durationMinutes: replacement.durationMinutes, manuallyEdited: true } });
+  }
+  await db.attendance.updateMany({ where: { lessonId: original.id, manuallyEdited: false }, data: { status: "RESCHEDULED" } });
+  await db.lesson.update({ where: { id: original.id }, data: { status: "RESCHEDULED", manuallyEdited: true } });
   return db.lesson.create({
     data: {
       ...target,
       scheduledDate: dateOnly(replacement.date),
       startMinute: replacement.startMinute,
       durationMinutes: replacement.durationMinutes,
-      title: lesson.title,
-      goal: lesson.goal,
-      recurringScheduleId: lesson.recurringScheduleId,
-      scheduleRevision: lesson.scheduleRevision,
-      originalLessonId: lesson.id,
+      title: original.title,
+      goal: original.goal,
+      recurringScheduleId: original.recurringScheduleId,
+      scheduleRevision: original.scheduleRevision,
+      originalLessonId: original.id,
       manuallyEdited: true,
-      attendance: { create: lesson.attendance.map(({ studentId }) => ({ studentId, status: "PLANNED" })) },
+      attendance: { create: original.attendance.map(({ studentId }) => ({ studentId, status: "PLANNED" })) },
     },
   });
+}
+
+export async function updateOccurrenceSchedule(db: Db, lessonId: string, replacement: { date: string; startMinute: number; durationMinutes: number }) {
+  const lesson = await findOccurrence(db, lessonId);
+  if (lesson.status === "RESCHEDULED" && lesson.replacementLesson) throw new ScheduleDomainError("Исходную запись переноса нельзя перемещать. Измените связанную замену.");
+  const original = lesson.originalLessonId ? await findOccurrence(db, lesson.originalLessonId) : lesson;
+  if (original.recurringScheduleId) {
+    const sourceDate = sourceOccurrenceDate(original.generationKey) ?? toDateInput(original.scheduledDate);
+    await db.scheduleException.deleteMany({ where: { scheduleId: original.recurringScheduleId, occurrenceDate: dateOnly(sourceDate) } });
+    await db.scheduleException.create({ data: { scheduleId: original.recurringScheduleId, occurrenceDate: dateOnly(sourceDate), kind: "OCCURRENCE_OVERRIDE", replacementDate: dateOnly(replacement.date), replacementStartMinute: replacement.startMinute, replacementDurationMinutes: replacement.durationMinutes } });
+  }
+  return db.lesson.update({ where: { id: lessonId }, data: { scheduledDate: dateOnly(replacement.date), startMinute: replacement.startMinute, durationMinutes: replacement.durationMinutes, manuallyEdited: true } });
 }
 
 export async function removeOccurrence(db: Db, lessonId: string) {

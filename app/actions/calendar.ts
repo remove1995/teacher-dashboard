@@ -3,9 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
-import { dateOnly, timeToMinute, todayDate } from "@/lib/domain/dates";
-import { sourceOccurrenceDate } from "@/lib/domain/schedule";
-import { cancelOccurrenceRecord, removeOccurrence, rescheduleOccurrence, ScheduleDomainError } from "@/lib/services/schedule-service";
+import { dateOnly, timeToMinute } from "@/lib/domain/dates";
+import { cancelOccurrenceRecord, removeOccurrence, rescheduleOccurrence, ScheduleDomainError, updateOccurrenceSchedule } from "@/lib/services/schedule-service";
 import { EMPTY_ACTION_STATE, type ActionState } from "@/lib/action-state";
 
 const required = (formData: FormData, key: string) => {
@@ -14,24 +13,14 @@ const required = (formData: FormData, key: string) => {
   return value;
 };
 const duration = (formData: FormData) => { const value=Number(required(formData,"durationMinutes")); if(!Number.isInteger(value)||value<15||value>480)throw new Error("Некорректная длительность"); return value; };
-const refresh = () => { revalidatePath("/calendar"); revalidatePath("/lessons"); revalidatePath("/attendance"); };
+const refresh = () => { revalidatePath("/calendar"); revalidatePath("/lessons"); revalidatePath("/attendance"); revalidatePath("/payments"); revalidatePath("/students", "layout"); };
 const expected = (error: unknown) => error instanceof ScheduleDomainError ? { error: error.message } : null;
 
 export async function updateCalendarOccurrence(lessonId: string, _state: ActionState, formData: FormData): Promise<ActionState> {
   const nextDate = required(formData, "date");
-  const lesson = await prisma.lesson.findUniqueOrThrow({ where: { id: lessonId }, include: { recurringSchedule: { select: { timezone: true } } } });
-  const today = todayDate(lesson.recurringSchedule?.timezone);
-  if (lesson.scheduledDate.toISOString().slice(0,10) < today || nextDate < today) return { error: "Прошедшее занятие нельзя изменить этим действием. Используйте перенос с сохранением истории." };
   const startMinute = timeToMinute(required(formData, "startTime"));
   const durationMinutes = duration(formData);
-  await prisma.$transaction(async (tx) => {
-    if (lesson.recurringScheduleId) {
-      const sourceDate = sourceOccurrenceDate(lesson.generationKey) ?? lesson.scheduledDate.toISOString().slice(0,10);
-      await tx.scheduleException.deleteMany({ where: { scheduleId: lesson.recurringScheduleId!, occurrenceDate: dateOnly(sourceDate) } });
-      await tx.scheduleException.create({ data: { scheduleId: lesson.recurringScheduleId!, occurrenceDate: dateOnly(sourceDate), kind: "OCCURRENCE_OVERRIDE", replacementDate: dateOnly(nextDate), replacementStartMinute: startMinute, replacementDurationMinutes: durationMinutes } });
-    }
-    await tx.lesson.update({ where: { id: lessonId }, data: { scheduledDate: dateOnly(nextDate), startMinute, durationMinutes, manuallyEdited: true } });
-  });
+  await prisma.$transaction((tx) => updateOccurrenceSchedule(tx, lessonId, { date: nextDate, startMinute, durationMinutes }));
   refresh();
   return EMPTY_ACTION_STATE;
 }

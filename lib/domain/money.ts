@@ -95,10 +95,52 @@ export function expectedForPaymentPeriod(payments: PaymentVersion[], fallback = 
   return current.length ? current.reduce((maximum, payment) => Math.max(maximum, payment.suggestedAmountMinor), 0) : fallback;
 }
 
+/**
+ * Reconciles a PAY_PER_LESSON account without treating independent lesson
+ * receipts as partial payments against one shared expected amount.
+ *
+ * The calculated service value remains authoritative. Historical receipts can
+ * additionally prove that separate expected charges were settled, while an
+ * amount above an individual receipt's expectation remains a real overpayment.
+ */
+export function expectedForPerLessonPeriod(payments: PaymentVersion[], calculatedMinor = 0) {
+  assertMinorUnits(calculatedMinor, "calculatedMinor");
+  const coveredExpected = currentPaymentVersions(payments).reduce(
+    (sum, payment) => sum + Math.min(payment.actualAmountMinor, payment.suggestedAmountMinor),
+    0,
+  );
+  return Math.max(calculatedMinor, coveredExpected);
+}
+
 export const paymentAccountKey = (studentId: string, cohortId: string | null) => `${studentId}:${cohortId ?? "individual"}`;
+
+/** Automatic payment snapshots are history, not the current service charge. */
+export function expectedForBillablePeriod(payments: Array<PaymentVersion & { manuallyOverridden?: boolean }>, calculatedMinor: number) {
+  assertMinorUnits(calculatedMinor, "calculatedMinor");
+  const overrides = currentPaymentVersions(payments).filter((payment) => payment.manuallyOverridden);
+  return overrides.length ? expectedForPaymentPeriod(overrides, calculatedMinor) : calculatedMinor;
+}
+
+/** A reschedule link identifies one service; cancellation is not a service. */
+export function billableLessonServices<T extends { id: string; status: string; originalLessonId?: string | null }>(lessons: T[], completedOnly = false): T[] {
+  const seen = new Set<string>();
+  return lessons.filter((lesson) => {
+    if (completedOnly ? lesson.status !== "COMPLETED" : !["PLANNED", "COMPLETED"].includes(lesson.status)) return false;
+    const key = lesson.originalLessonId ?? lesson.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export function cashReceived(payments: Array<PaymentVersion & { paymentDate?: Date | null }>) {
   return cumulativeReceived(payments.filter((payment) => payment.paymentDate));
+}
+
+export function cashReceivedInPeriod(payments: Array<PaymentVersion & { paymentDate?: Date | null }>, start: Date, end: Date) {
+  return currentPaymentVersions(payments)
+    .filter((payment) => payment.paymentDate && payment.paymentDate >= start && payment.paymentDate <= end)
+    .reduce((sum, payment) => sum + payment.actualAmountMinor, 0);
 }
 
 export function earnedIncome(lessons: LessonEarning[]) {

@@ -115,7 +115,8 @@ export async function materializeLesson(targetType: "student" | "cohort", target
   const settings = await getTeacherSettings();
   const lesson = await prisma.$transaction(async (tx) => {
     const targetWhere = targetType === "student" ? { studentId: targetId } : { cohortId: targetId };
-    const candidate = candidateId ? await tx.lesson.findFirst({ where: { id: candidateId, ...targetWhere, recurringScheduleId: { not: null } } }) : null;
+    const suppliedCandidate = candidateId ? await tx.lesson.findFirst({ where: { id: candidateId, ...targetWhere, recurringScheduleId: { not: null } } }) : null;
+    const candidate = suppliedCandidate ?? await tx.lesson.findFirst({ where: { ...targetWhere, scheduledDate, startMinute, status: "PLANNED", generationKey: { not: null } }, orderBy: { createdAt: "asc" } });
     const order = await tx.lesson.aggregate({ where: { ...targetWhere, kanbanVisible: true, scheduledDate: { gte: dateOnly(`${scheduledDateText.slice(0,7)}-01`), lt: new Date(Date.UTC(scheduledDate.getUTCFullYear(),scheduledDate.getUTCMonth()+1,1)) } }, _max: { kanbanOrder: true } });
     if (candidate) return candidate.kanbanVisible ? candidate : tx.lesson.update({ where: { id: candidate.id }, data: { scheduledDate, startMinute, title: requestedTitle || candidate.title, ...planned(), kanbanMaterializedAt: new Date(), kanbanOrder: (order._max.kanbanOrder ?? -1)+1 } });
     const attendanceStudentIds = targetType === "student" ? [targetId] : (await tx.cohortMembership.findMany({ where: { cohortId: targetId, activeFrom: { lte: scheduledDate }, AND: [{ OR: [{ activeTo: null }, { activeTo: { gte: scheduledDate } }] }, { OR: [{ status: "REGULAR", OR: [{ regularFrom: null }, { regularFrom: { lte: scheduledDate } }] }, { trialLessonDate: scheduledDate }] }] }, select: { studentId: true } })).map(({studentId})=>studentId);

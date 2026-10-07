@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  cashReceived, cumulativeReceived, earnedIncome, expectedForPaymentPeriod, filterFinanceRows,
+  cashReceived, cashReceivedInPeriod, cumulativeReceived, earnedIncome, expectedForPaymentPeriod, expectedForPerLessonPeriod, filterFinanceRows,
   paymentAccountKey, paymentStatus, resolveEffectiveRate, resolveManualSuggestion, resolveProfileForPeriod, suggestPayment, currentPaymentVersions,
 } from "./money";
 
@@ -25,6 +25,23 @@ describe("payment aggregation", () => {
   });
   it("sums separate partial-payment records", () => expect(cumulativeReceived(payments)).toBe(1200000));
   it("counts expected amount once across multiple receipts", () => expect(expectedForPaymentPeriod(payments)).toBe(1200000));
+  it("reconciles independent per-lesson receipts instead of treating them as overpayment against one lesson", () => {
+    const lessonReceipts = Array.from({ length: 4 }, (_, index) => ({ id: `lesson-${index}`, actualAmountMinor: 275000, suggestedAmountMinor: 275000 }));
+    const expected = expectedForPerLessonPeriod(lessonReceipts, 275000);
+    expect(expected).toBe(1100000);
+    expect(cumulativeReceived(lessonReceipts)).toBe(1100000);
+    expect(paymentStatus(expected, cumulativeReceived(lessonReceipts))).toBe("PAID");
+  });
+  it("keeps a genuine per-receipt excess visible as overpayment", () => {
+    const receipts = [{ id: "over", actualAmountMinor: 300000, suggestedAmountMinor: 275000 }];
+    const expected = expectedForPerLessonPeriod(receipts, 275000);
+    expect(expected).toBe(275000);
+    expect(paymentStatus(expected, cumulativeReceived(receipts))).toBe("OVERPAID");
+  });
+  it("combines partial receipts against the calculated per-lesson obligation", () => {
+    const receipts = [{ id: "one", actualAmountMinor: 100000, suggestedAmountMinor: 275000 }, { id: "two", actualAmountMinor: 175000, suggestedAmountMinor: 275000 }];
+    expect(expectedForPerLessonPeriod(receipts, 275000)).toBe(275000);
+  });
   it("preserves a manually lowered expected amount instead of restoring the fallback", () => expect(expectedForPaymentPeriod([{ id: "manual", actualAmountMinor: 0, suggestedAmountMinor: 1100000 }], 1200000)).toBe(1100000));
   it("keeps correction history but uses only its latest record", () => expect(cumulativeReceived([...payments, { id: "fix", correctsPaymentId: "one", actualAmountMinor: 400000, suggestedAmountMinor: 1200000 }])).toBe(1100000));
   it("keeps pair participants in separate payment accounts", () => expect(paymentAccountKey("adam", "pair")).not.toBe(paymentAccountKey("daniel", "pair")));
@@ -35,6 +52,22 @@ describe("received and earned", () => {
   it("keeps received and earned totals separate", () => {
     expect(cashReceived([{ id: "p", actualAmountMinor: 2000000, suggestedAmountMinor: 2000000, paymentDate: new Date() }])).toBe(2000000);
     expect(earnedIncome([{ id: "l", status: "COMPLETED", valueMinor: 750000 }])).toBe(750000);
+  });
+  it("attributes received cash to Payment.paymentDate inside the selected period", () => {
+    const payments = [
+      { id: "before", actualAmountMinor: 100000, suggestedAmountMinor: 100000, paymentDate: new Date("2026-07-31") },
+      { id: "inside", actualAmountMinor: 275000, suggestedAmountMinor: 275000, paymentDate: new Date("2026-08-15") },
+      { id: "after", actualAmountMinor: 200000, suggestedAmountMinor: 200000, paymentDate: new Date("2026-09-01") },
+    ];
+    expect(cashReceivedInPeriod(payments, new Date("2026-08-01"), new Date("2026-08-31"))).toBe(275000);
+  });
+  it("applies correction history before attributing cash to a period", () => {
+    const payments = [
+      { id: "old", actualAmountMinor: 275000, suggestedAmountMinor: 275000, paymentDate: new Date("2026-08-15") },
+      { id: "fix", correctsPaymentId: "old", actualAmountMinor: 250000, suggestedAmountMinor: 275000, paymentDate: new Date("2026-09-01") },
+    ];
+    expect(cashReceivedInPeriod(payments, new Date("2026-08-01"), new Date("2026-08-31"))).toBe(0);
+    expect(cashReceivedInPeriod(payments, new Date("2026-09-01"), new Date("2026-09-30"))).toBe(250000);
   });
   it("completed lesson earns and planned lesson does not", () => expect(earnedIncome([{ id: "done", status: "COMPLETED", valueMinor: 250000 }, { id: "future", status: "PLANNED", valueMinor: 250000 }])).toBe(250000));
   it("does not double-count a rescheduled service", () => expect(earnedIncome([{ id: "original", status: "RESCHEDULED", valueMinor: 250000 }, { id: "replacement", status: "COMPLETED", valueMinor: 250000, originalLessonId: "original" }])).toBe(250000));

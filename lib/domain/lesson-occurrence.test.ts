@@ -18,6 +18,7 @@ describe("lesson occurrence safety", () => {
   });
   it("allows a future planned occurrence to be rescheduled", () => expect(canRescheduleOccurrence(empty, false)).toBe(true));
   it("allows a past empty planned occurrence to be rescheduled", () => expect(canRescheduleOccurrence(empty, true)).toBe(true));
+  it("does not use the calendar date alone to block a planned occurrence with lesson content", () => expect(canRescheduleOccurrence({ ...empty, homeworkText: "Повторить слова" }, true)).toBe(true));
   it("blocks completed and cancelled historical lessons from rescheduling", () => {
     expect(canRescheduleOccurrence({ ...empty, status: "COMPLETED" }, true)).toBe(false);
     expect(canRescheduleOccurrence({ ...empty, status: "CANCELLED" }, true)).toBe(false);

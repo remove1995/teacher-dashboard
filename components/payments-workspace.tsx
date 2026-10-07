@@ -22,11 +22,10 @@ export function PaymentsWorkspace({ rows, period, summary, openKey, editPaymentI
   }, [rows]);
 
   return <>
-    <section className="finance-summary" aria-label="Итоги периода">
-      <article><span>Получено</span><strong>{rubles(summary.receivedMinor)}</strong></article>
-      <article><span>Заработано</span><strong>{rubles(summary.earnedMinor)}</strong></article>
-      <article><span>Ожидается</span><strong>{rubles(summary.outstandingMinor)}</strong></article>
-      <article><span>Кредиты</span><strong>{rubles(summary.creditMinor)}</strong></article>
+    <section className="finance-summary finance-working-summary" aria-label="Итоги периода">
+      <article className="finance-kpi-received"><span>Получено</span><strong>{rubles(summary.receivedMinor)}</strong><small>Фактически поступившие оплаты</small></article>
+      <article className="finance-kpi-expected"><span>Ожидается</span><strong>{rubles(summary.outstandingMinor)}</strong></article>
+      <article className="finance-kpi-credits"><span>Кредиты</span><strong>{rubles(summary.creditMinor)}</strong></article>
     </section>
     <section className="finance-list">
       <header className="finance-table-head"><span>Ученик / контекст</span><span>Модель</span><span>Ожидается</span><span>Получено</span><span>Баланс</span><span>Статус</span><span /></header>
@@ -58,7 +57,7 @@ export function PaymentsWorkspace({ rows, period, summary, openKey, editPaymentI
 }
 
 function PaymentSheet({ participant, period }: { participant: FinanceParticipant; period: FinancePeriod }) {
-  const calculated = participant.expectedMinor;
+  const calculated = participant.suggestedPaymentMinor;
   const [suggested, setSuggested] = useState(String(calculated / 100));
   const changed = Math.round(Number(suggested.replace(",", ".")) * 100) !== calculated;
   return <div className="payment-sheet-backdrop"><aside className="payment-sheet" aria-label="Добавить оплату">
