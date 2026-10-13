@@ -1,3 +1,5 @@
+import { normalizeIncomeCategory } from "./domain/extra-income";
+
 export const TUTORFLOW_BACKUP_FORMAT = "tutorflow-backup" as const;
 export const TUTORFLOW_BACKUP_VERSION = 1 as const;
 
@@ -5,7 +7,7 @@ export const BACKUP_MODEL_NAMES = [
   "TeacherSettings", "Student", "Cohort", "LessonPlanningMonth", "CohortMembership",
   "BillingProfile", "RecurringSchedule", "ScheduleSlot", "ScheduleException", "Lesson",
   "LessonStage", "Attendance", "Payment", "Credit", "LearningRecord", "TestResult",
-  "Attachment", "Tag", "StudentTag", "CohortTag", "LessonTag",
+  "Attachment", "Tag", "StudentTag", "CohortTag", "LessonTag", "IncomeTag", "ExtraIncome",
 ] as const;
 
 export type BackupModelName = (typeof BACKUP_MODEL_NAMES)[number];
@@ -42,6 +44,8 @@ export const BACKUP_SCALAR_FIELDS: Record<BackupModelName, readonly string[]> = 
   StudentTag: ["studentId", "tagId"],
   CohortTag: ["cohortId", "tagId"],
   LessonTag: ["lessonId", "tagId"],
+  IncomeTag: ["id", "name", "normalizedName", "createdAt", "updatedAt"],
+  ExtraIncome: ["id", "amountMinor", "receivedAt", "title", "tagId", "receiptUrl", "comment", "createdAt", "updatedAt"],
 };
 
 const OPTIONAL_BACKUP_FIELDS: Partial<Record<BackupModelName, readonly string[]>> = {
@@ -54,6 +58,7 @@ ID_FIELDS.CohortTag = ["cohortId", "tagId"];
 ID_FIELDS.LessonTag = ["lessonId", "tagId"];
 
 const FOREIGN_KEYS: Partial<Record<BackupModelName, Record<string, BackupModelName>>> = {
+  ExtraIncome: { tagId: "IncomeTag" },
   LessonPlanningMonth: { studentId: "Student", cohortId: "Cohort" },
   CohortMembership: { studentId: "Student", cohortId: "Cohort" },
   BillingProfile: { studentId: "Student", cohortId: "Cohort", membershipId: "CohortMembership" },
@@ -86,7 +91,10 @@ export function validateTutorFlowBackup(input: unknown): BackupValidationResult 
   if (!validIsoDate(input.createdAt)) return { ok: false, error: "В резервной копии указана некорректная дата создания." };
   if (!isObject(input.data)) return { ok: false, error: "В резервной копии отсутствует раздел data." };
 
-  const data = input.data as Record<string, unknown>;
+  // Additive v1 compatibility: pre-Finance-2 backups contain neither section.
+  // Clone rather than mutating the uploaded JSON object during preview.
+  const data: Record<string, unknown> = { ...input.data };
+  for (const name of ["IncomeTag", "ExtraIncome"]) if (!(name in data)) data[name] = [];
   if (Object.keys(data).some((key) => !BACKUP_MODEL_NAMES.includes(key as BackupModelName))) return { ok: false, error: "Резервная копия содержит неизвестный раздел данных." };
   for (const name of BACKUP_MODEL_NAMES) {
     if (!Array.isArray(data[name])) return { ok: false, error: `В резервной копии отсутствует раздел ${name}.` };
@@ -114,7 +122,20 @@ export function validateTutorFlowBackup(input: unknown): BackupValidationResult 
     }
   }
 
-  return { ok: true, backup: input as TutorFlowBackup };
+  const categories = new Set<string>();
+  for (const row of data.IncomeTag as BackupRow[]) {
+    if (typeof row.name !== "string" || !row.name.trim() || row.name.length > 80 || row.normalizedName !== normalizeIncomeCategory(row.name) || categories.has(String(row.normalizedName)) || !validIsoDate(row.createdAt) || !validIsoDate(row.updatedAt)) return { ok: false, error: "Некорректная или повторяющаяся категория дохода." };
+    categories.add(String(row.normalizedName));
+  }
+  for (const row of data.ExtraIncome as BackupRow[]) {
+    if (typeof row.amountMinor !== "number" || !Number.isInteger(row.amountMinor) || row.amountMinor <= 0 || row.amountMinor > 2147483647 || typeof row.title !== "string" || !row.title.trim() || row.title.length > 200 || typeof row.receivedAt !== "string" || !validIsoDate(row.receivedAt) || new Date(row.receivedAt).toISOString().slice(11) !== "00:00:00.000Z" || !validIsoDate(row.createdAt) || !validIsoDate(row.updatedAt) || !ids.IncomeTag.has(String(row.tagId))) return { ok: false, error: "Некорректная запись другого дохода." };
+    if (row.comment !== null && (typeof row.comment !== "string" || row.comment.length > 5000)) return { ok: false, error: "Некорректный комментарий дохода." };
+    if (row.receiptUrl !== null) {
+      try { if (typeof row.receiptUrl !== "string" || !["http:", "https:"].includes(new URL(row.receiptUrl).protocol)) throw new Error(); }
+      catch { return { ok: false, error: "Некорректная ссылка на чек дохода." }; }
+    }
+  }
+  return { ok: true, backup: { ...input, data } as TutorFlowBackup };
 }
 
 export function parseTutorFlowBackupJson(text: string): BackupValidationResult {
@@ -132,6 +153,8 @@ export function backupPreview(backup: TutorFlowBackup) {
     lessons: backup.data.Lesson.length,
     schedules: backup.data.RecurringSchedule.length,
     payments: backup.data.Payment.length,
+    extraIncomes: backup.data.ExtraIncome.length,
+    incomeTags: backup.data.IncomeTag.length,
     learningRecords: backup.data.LearningRecord.length + backup.data.TestResult.length,
   };
 }

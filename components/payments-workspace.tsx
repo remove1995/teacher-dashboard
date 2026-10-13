@@ -4,13 +4,14 @@ import { useMemo, useState } from "react";
 import { correctPayment, createPayment } from "@/app/actions/payments";
 import type { FinanceParentRow, FinanceParticipant, FinancePeriod } from "@/lib/services/finance-service";
 
-const rubles = (minor: number) => new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(minor / 100);
+const rubles = (minor: number, maximumFractionDigits = 0) => new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits }).format(minor / 100);
 const modelLabels = { MONTHLY_PREPAID: "Предоплата за месяц", WEEKLY_PREPAID: "Предоплата за неделю", PAY_PER_LESSON: "За урок", GROUP_SUBSCRIPTION: "Абонемент группы" } as const;
 const statusLabels = { EXPECTED: "Ожидается", PARTIALLY_PAID: "Частично", PAID: "Оплачено", OVERPAID: "Переплата" } as const;
 
-export function PaymentsWorkspace({ rows, period, summary, openKey, editPaymentId }: {
+export function PaymentsWorkspace({ rows, period, summary, otherReceivedMinor, openKey, editPaymentId }: {
   rows: FinanceParentRow[]; period: FinancePeriod;
   summary: { expectedMinor: number; receivedMinor: number; earnedMinor: number; outstandingMinor: number; creditMinor: number };
+  otherReceivedMinor: number;
   openKey?: string; editPaymentId?: string;
 }) {
   const [expanded, setExpanded] = useState(() => new Set(rows.filter((row) => row.kind !== "INDIVIDUAL").map((row) => row.id)));
@@ -25,7 +26,7 @@ export function PaymentsWorkspace({ rows, period, summary, openKey, editPaymentI
     <section className="finance-summary finance-working-summary" aria-label="Итоги периода">
       <article className="finance-kpi-received"><span>Получено</span><strong>{rubles(summary.receivedMinor)}</strong><small>Фактически поступившие оплаты</small></article>
       <article className="finance-kpi-expected"><span>Ожидается</span><strong>{rubles(summary.outstandingMinor)}</strong></article>
-      <article className="finance-kpi-credits"><span>Кредиты</span><strong>{rubles(summary.creditMinor)}</strong></article>
+      <article className="finance-kpi-other-income"><span>Другие доходы</span><strong>{rubles(otherReceivedMinor, 2)}</strong></article>
     </section>
     <section className="finance-list">
       <header className="finance-table-head"><span>Ученик / контекст</span><span>Модель</span><span>Ожидается</span><span>Получено</span><span>Баланс</span><span>Статус</span><span /></header>

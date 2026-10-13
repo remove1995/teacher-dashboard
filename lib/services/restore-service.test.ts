@@ -13,7 +13,7 @@ function fakeDatabase(initial: Partial<Record<BackupModelName, BackupRow[]>> = {
   const delegates = Object.fromEntries(BACKUP_MODEL_NAMES.map((name) => [delegateNames[name], {
     deleteMany: async () => { state[name] = []; return { count: 0 }; },
     updateMany: async ({ data }: { data: BackupRow }) => { state[name] = state[name].map((item) => ({ ...item, ...data })); return { count: state[name].length }; },
-    createMany: async ({ data }: { data: BackupRow[] }) => { if (name === failCreate) throw new Error("injected failure"); state[name] = structuredClone(data); return { count: data.length }; },
+    createMany: async ({ data }: { data: BackupRow[] }) => { if (name === failCreate) throw new Error("injected failure"); if (name === "ExtraIncome" && data.some((row) => !state.IncomeTag.some((tag) => tag.id === row.tagId))) throw new Error("missing income category"); state[name] = structuredClone(data); return { count: data.length }; },
     update: async ({ where, data }: { where: { id: string }; data: BackupRow }) => { const item = state[name].find((candidate) => candidate.id === where.id); if (!item) throw new Error("missing row"); Object.assign(item, data); return item; },
   }])) as Record<string, unknown>;
   const client = {
@@ -28,6 +28,28 @@ function fakeDatabase(initial: Partial<Record<BackupModelName, BackupRow[]>> = {
 }
 
 describe("TutorFlow full-replace restore", () => {
+  const category = () => row("IncomeTag", { id: "category", name: "Материалы", normalizedName: "материалы", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z" });
+  const income = () => row("ExtraIncome", { id: "income", tagId: "category", amountMinor: 350025, receivedAt: "2026-10-04T00:00:00.000Z", title: "What's The Place?", receiptUrl: "https://example.com/receipt", comment: "Продажа", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z" });
+  it("restores independent income IDs, category relations, dates and minor units", async () => {
+    const data = emptyData(); data.IncomeTag.push(category()); data.ExtraIncome.push(income());
+    const database = fakeDatabase({ ExtraIncome: [{ id: "old-income" }], IncomeTag: [{ id: "old-tag" }] });
+    await restoreSingleUserDatabase(database.client, backup(data));
+    expect(database.state.ExtraIncome).toEqual([income()]);
+    expect(database.state.IncomeTag).toEqual([category()]);
+  });
+  it("restores older v1 snapshots with new models empty in full-replace mode", async () => {
+    const candidate = backup();
+    delete (candidate.data as Partial<TutorFlowBackupData>).ExtraIncome; delete (candidate.data as Partial<TutorFlowBackupData>).IncomeTag;
+    const database = fakeDatabase({ ExtraIncome: [income()], IncomeTag: [category()] });
+    await restoreSingleUserDatabase(database.client, candidate);
+    expect(database.state.ExtraIncome).toEqual([]); expect(database.state.IncomeTag).toEqual([]);
+  });
+  it("rolls income/category replacement back if income insertion fails", async () => {
+    const data = emptyData(); data.IncomeTag.push(category()); data.ExtraIncome.push(income());
+    const database = fakeDatabase({ ExtraIncome: [income()], IncomeTag: [category()] }, "ExtraIncome");
+    await expect(restoreSingleUserDatabase(database.client, backup(data))).rejects.toThrow("injected failure");
+    expect(database.state.ExtraIncome).toEqual([income()]); expect(database.state.IncomeTag).toEqual([category()]);
+  });
   it("replaces existing records and preserves original IDs and relations", async () => {
     const data = emptyData();
     data.Student.push(row("Student", { id: "student-new" }));

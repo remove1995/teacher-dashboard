@@ -56,11 +56,12 @@ describe("actionable Dashboard and working Finance UI", () => {
     lessons([], []);
   });
 
-  it("shows only received, outstanding and credits in the working Finance KPI row", () => {
-    const html = renderToStaticMarkup(React.createElement(PaymentsWorkspace, { rows: [], period, summary: { expectedMinor: 10000, receivedMinor: 8000, earnedMinor: 7000, outstandingMinor: 2000, creditMinor: 0 } }));
+  it("shows only student received, outstanding and other income in the working Finance KPI row", () => {
+    const html = renderToStaticMarkup(React.createElement(PaymentsWorkspace, { rows: [], period, otherReceivedMinor: 350025, summary: { expectedMinor: 10000, receivedMinor: 8000, earnedMinor: 7000, outstandingMinor: 2000, creditMinor: 90000 } }));
     expect(html).toContain("Получено");
     expect(html).toContain("Ожидается");
-    expect(html).toContain("Кредиты");
+    expect(html).toContain("Другие доходы");
+    expect(html).not.toContain("Кредиты");
     expect(html).not.toContain("Заработано");
     expect(html.split("class=").filter((part) => part.startsWith(String.fromCharCode(34) + "finance-kpi-")).length).toBe(3);
   });

@@ -18,6 +18,8 @@ export async function restoreSingleUserDatabase(client: PrismaClient, candidate:
   const backup = validation.backup;
 
   await client.$transaction(async (tx) => {
+    await tx.extraIncome.deleteMany();
+    await tx.incomeTag.deleteMany();
     await tx.attachment.deleteMany();
     await tx.studentTag.deleteMany();
     await tx.cohortTag.deleteMany();
@@ -43,6 +45,8 @@ export async function restoreSingleUserDatabase(client: PrismaClient, candidate:
     await tx.teacherSettings.deleteMany();
 
     const data = backup.data;
+    if (data.IncomeTag.length) await tx.incomeTag.createMany({ data: input<Prisma.IncomeTagCreateManyInput>(data.IncomeTag) });
+    if (data.ExtraIncome.length) await tx.extraIncome.createMany({ data: input<Prisma.ExtraIncomeCreateManyInput>(data.ExtraIncome) });
     if (data.TeacherSettings.length) await tx.teacherSettings.createMany({ data: input<Prisma.TeacherSettingsCreateManyInput>(data.TeacherSettings) });
     if (data.Student.length) await tx.student.createMany({ data: input<Prisma.StudentCreateManyInput>(data.Student) });
     if (data.Cohort.length) await tx.cohort.createMany({ data: input<Prisma.CohortCreateManyInput>(data.Cohort) });

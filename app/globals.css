@@ -1339,7 +1339,7 @@ main .page-stack small{font-size:var(--font-size-secondary);line-height:1.45}
 .finance-working-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
 .finance-working-summary article.finance-kpi-received{background:var(--surface-finance-received)}
 .finance-working-summary article.finance-kpi-expected{background:var(--surface-finance-expected)}
-.finance-working-summary article.finance-kpi-credits{background:var(--surface-finance-credits)}
+.finance-working-summary article.finance-kpi-other-income{background:var(--surface-finance-credits)}
 .dashboard-lesson-list a{color:inherit}
 .dashboard-lesson-list a:hover,.dashboard-attention-groups a:hover{text-decoration:underline;text-underline-offset:3px}
 .dashboard-lesson-list a:focus-visible,.dashboard-attention-groups a:focus-visible{outline:2px solid var(--color-primary);outline-offset:3px;border-radius:3px;text-decoration:underline}
@@ -1348,3 +1348,24 @@ main .page-stack small{font-size:var(--font-size-secondary);line-height:1.45}
 .dashboard-attention-groups .attention-list{margin:8px 0 0}
 .dashboard-attention-groups a{display:block;color:inherit;overflow-wrap:anywhere}
 @media(max-width:760px){.finance-working-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-working-summary article:last-child{grid-column:1/-1}}
+
+/* Finance 2.0: independent received income, existing warm surface system. */
+.finance-tabs{width:max-content;max-width:100%;overflow-x:auto}
+.finance-tabs a{flex:none}
+.finance-cash-overview{display:grid;gap:var(--space-sm);padding:var(--space-lg)}
+.finance-cash-overview>strong{font-family:var(--font-display);font-size:28px;font-weight:500}
+.finance-cash-overview>span,.finance-cash-overview>small{color:var(--color-text-secondary);font-size:14px}
+.extra-income-summary{grid-template-columns:minmax(0,1fr)}
+.extra-income-controls{grid-template-columns:1fr}
+.extra-income-list{padding:var(--space-md);min-width:0}
+.extra-income-table{overflow-x:auto}
+.extra-income-table table{width:100%;border-collapse:collapse;text-align:left;font-size:15px}
+.extra-income-table th{font-size:13px;font-weight:500;color:var(--color-text-secondary)}
+.extra-income-table th,.extra-income-table td{padding:14px 12px;vertical-align:top;border-bottom:1px solid var(--color-border);line-height:1.45}
+.extra-income-table td{overflow-wrap:anywhere;max-width:280px}
+.extra-income-table time,.extra-income-money{white-space:nowrap}
+.extra-income-money{font-weight:600;font-variant-numeric:tabular-nums}
+.extra-income-actions{display:flex;gap:8px;flex-wrap:wrap}
+.extra-income-actions .small-button{display:inline-flex;align-items:center;justify-content:center}
+.extra-income-actions .secondary-button{padding:7px 9px;min-height:40px;font-size:14px}
+@media(max-width:760px){.finance-tabs{width:100%;flex-wrap:nowrap}.extra-income-table table{min-width:760px}.finance-cash-overview{padding:var(--space-md)}}

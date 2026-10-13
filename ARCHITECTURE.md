@@ -92,7 +92,31 @@ Replacement lessons created by rescheduling must never add a second earned charg
 
 Expected payment is derived from the billing profile effective for the period, countable lesson services, and explicit applicable credits. Cash received is grouped by payment date. Earned income resolves the billing profile effective on each completed lesson date, preserving historical rates. For group subscriptions the current MVP recognizes the participant subscription proportionally across countable lessons in that payment period; this allocation policy remains an explicit product decision that can be revised without changing stored receipts.
 
-### Credits
+### Finance 2.0 v1: other income
+
+`ExtraIncome` is independent actual received cash: positive integer minor units,
+received date, transaction title, receipt URL/comment, and a required `IncomeTag`.
+It never references students, billing profiles, payments, lessons, or credits.
+Normal create/update/delete is supported; deletion affects only that income row.
+Categories use NFKC, collapsed whitespace and case-insensitive normalized names.
+Their unique normalized key prevents accidental duplicate variants.
+
+`/payments` remains the production route; its navigation label is Finance with
+Student Payments and Other Income tabs. Student calculations remain unchanged.
+`getFinanceOverview` adds the existing corrected student cash summary to bounded
+monthly ExtraIncome cash. Credits, outstanding and accruals are never income.
+The Dashboard KPI continues to represent student cash, as before this phase.
+
+The backup envelope remains version 1. IncomeTag/ExtraIncome are always exported;
+older v1 backups lacking the new sections normalize them to empty arrays before
+validation/preview/restore. Full replace with an old backup therefore clears any
+current other income. Restore deletes income before categories and creates
+categories before income, with FK validation and the existing atomic transaction.
+No cascade is required. Monthly/yearly statistics and category grouping can use
+receivedAt/tagId indexes without another data-model migration. Statistics UI,
+expenses, forecasts, tax and category deletion are not part of v1.
+
+### Credits (student billing)
 
 Credits are explicit, teacher-confirmed records. Cancellation alone never creates a credit. A credit may be created only when the teacher confirms that a paid individual/pair lesson will not be made up and its value should carry forward.
 

@@ -428,6 +428,31 @@ model Attachment {
   @@index([paymentId])
 }
 
+model IncomeTag {
+  id             String        @id @default(cuid())
+  name           String
+  normalizedName String        @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  incomes        ExtraIncome[]
+}
+
+model ExtraIncome {
+  id          String    @id @default(cuid())
+  amountMinor Int
+  receivedAt  DateTime  @db.Date
+  title       String
+  tagId       String
+  receiptUrl  String?
+  comment     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tag         IncomeTag @relation(fields: [tagId], references: [id], onDelete: Restrict)
+
+  @@index([receivedAt])
+  @@index([tagId, receivedAt])
+}
+
 model Tag {
   id                 String       @id @default(cuid())
   name               String       @unique

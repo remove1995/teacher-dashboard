@@ -74,6 +74,7 @@ export function BackupDownloadButton() {
       <label className="secondary-button settings-restore-file">Восстановить из копии<input type="file" accept=".json,application/json" disabled={state !== "idle"} onChange={(event) => void selectFile(event.target.files?.[0])} /></label>
       {preview && <div className="settings-restore-preview">
         <strong>Резервная копия готова к проверке</strong>
+        <p>Другие доходы: {preview.extraIncomes} · Категории доходов: {preview.incomeTags}</p>
         <dl><div><dt>Создана</dt><dd>{new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(preview.createdAt))}</dd></div><div><dt>Версия</dt><dd>{preview.version}</dd></div><div><dt>Ученики</dt><dd>{preview.students}</dd></div><div><dt>Пары и группы</dt><dd>{preview.cohorts}</dd></div><div><dt>Уроки</dt><dd>{preview.lessons}</dd></div><div><dt>Расписания</dt><dd>{preview.schedules}</dd></div><div><dt>Оплаты</dt><dd>{preview.payments}</dd></div><div><dt>Учебные записи</dt><dd>{preview.learningRecords}</dd></div></dl>
         <label className="settings-restore-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>Я понимаю, что текущие данные TutorFlow будут заменены данными из резервной копии.</span></label>
         <button className="danger-button" type="button" disabled={!confirmed || state !== "idle"} onClick={() => void restore()}>{state === "restoring" ? "Восстанавливаем…" : "Восстановить данные"}</button>

@@ -9,7 +9,7 @@ import { AvatarImage } from "@/components/avatar-image";
 
 const navigation = [
   ["/", "Обзор", "home"], ["/lessons", "Уроки", "lessons"], ["/students", "Ученики", "students"],
-  ["/attendance", "Посещаемость", "attendance"], ["/payments", "Оплаты", "payments"],
+  ["/attendance", "Посещаемость", "attendance"], ["/payments", "Финансы", "payments"],
   ["/calendar", "Календарь", "calendar"], ["/settings", "Настройки", "settings"],
 ] as const;
 const isCurrent = (pathname: string, href: string) => href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);

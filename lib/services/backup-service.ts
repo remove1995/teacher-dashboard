@@ -21,7 +21,7 @@ async function readBackupData(client: BackupDatabase): Promise<TutorFlowBackupDa
     TeacherSettings, Student, Cohort, LessonPlanningMonth, CohortMembership,
     BillingProfile, RecurringSchedule, ScheduleSlot, ScheduleException, Lesson,
     LessonStage, Attendance, Payment, Credit, LearningRecord, TestResult,
-    Attachment, Tag, StudentTag, CohortTag, LessonTag,
+    Attachment, Tag, StudentTag, CohortTag, LessonTag, IncomeTag, ExtraIncome,
   ] = await Promise.all([
     client.teacherSettings.findMany(),
     client.student.findMany(),
@@ -44,13 +44,15 @@ async function readBackupData(client: BackupDatabase): Promise<TutorFlowBackupDa
     client.studentTag.findMany(),
     client.cohortTag.findMany(),
     client.lessonTag.findMany(),
+    client.incomeTag.findMany(),
+    client.extraIncome.findMany(),
   ]);
 
   return serializeBackupValue({
     TeacherSettings, Student, Cohort, LessonPlanningMonth, CohortMembership,
     BillingProfile, RecurringSchedule, ScheduleSlot, ScheduleException, Lesson,
     LessonStage, Attendance, Payment, Credit, LearningRecord, TestResult,
-    Attachment, Tag, StudentTag, CohortTag, LessonTag,
+    Attachment, Tag, StudentTag, CohortTag, LessonTag, IncomeTag, ExtraIncome,
   }) as TutorFlowBackupData;
 }
 
